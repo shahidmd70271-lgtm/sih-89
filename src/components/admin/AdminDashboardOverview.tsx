@@ -18,8 +18,25 @@ import { COOPERATIVE_SOCIETIES } from '../../data/mockData';
 export const AdminDashboardOverview: React.FC = () => {
   const { workers, approveWorkerVerification, rejectWorkerVerification, setActiveView, t } = useApp();
 
-  const pendingWorkers = workers.filter((w) => !w.isVerified && w.verificationStatus !== 'Rejected');
-  const verifiedCount = workers.filter((w) => w.isVerified).length;
+  const pendingWorkers = workers.filter(
+    (w) =>
+      !w.isVerified &&
+      w.verificationStatus !== 'Rejected' &&
+      w.verificationStatus !== 'rejected' &&
+      w.verificationStatus !== 'Removed' &&
+      w.verificationStatus !== 'Inactive' &&
+      (w as any).status !== 'removed' &&
+      (w as any).status !== 'inactive'
+  );
+  const verifiedCount = workers.filter(
+    (w) =>
+      w.isVerified &&
+      (w.verificationStatus === 'Verified' || w.verificationStatus === 'approved') &&
+      w.verificationStatus !== 'Removed' &&
+      w.verificationStatus !== 'Inactive' &&
+      (w as any).status !== 'removed' &&
+      (w as any).status !== 'inactive'
+  ).length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-8">

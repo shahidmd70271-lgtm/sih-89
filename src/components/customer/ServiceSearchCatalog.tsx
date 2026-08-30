@@ -47,11 +47,25 @@ export const ServiceSearchCatalog: React.FC = () => {
     setSortBy('nearest');
   };
 
+  const isAvailableVerifiedWorker = (w: Worker) => {
+    return Boolean(
+      w.isVerified &&
+      (w.verificationStatus === 'Verified' || w.verificationStatus === 'approved') &&
+      !(w as any).is_removed &&
+      (w as any).status !== 'removed' &&
+      (w as any).status !== 'inactive'
+    );
+  };
+
+  const totalVerifiedCount = useMemo(() => {
+    return workers.filter(isAvailableVerifiedWorker).length;
+  }, [workers]);
+
   const filteredWorkers = useMemo(() => {
     return workers
       .filter((w) => {
-        // Only show verified workers by default in public search
-        if (!w.isVerified) return false;
+        // Customer Find Services must show ONLY registered, admin approved, active, available workers
+        if (!isAvailableVerifiedWorker(w)) return false;
 
         // Service Type filter
         if (selectedServiceFilter !== 'All' && w.skill !== selectedServiceFilter) {
@@ -181,7 +195,7 @@ export const ServiceSearchCatalog: React.FC = () => {
               : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300'
           }`}
         >
-          {t('allTrades')} ({workers.filter((w) => w.isVerified).length})
+          {t('allTrades')} ({totalVerifiedCount})
         </button>
         {SERVICE_CATEGORIES.map((cat) => {
           const isSelected = selectedServiceFilter === cat.id;
@@ -379,6 +393,18 @@ export const ServiceSearchCatalog: React.FC = () => {
                 <WorkerCard key={worker.id} worker={worker} layout={viewMode} />
               ))}
             </div>
+          ) : totalVerifiedCount === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                No verified workers are currently available.
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                All Sahaayak trade workers are registered and verified by affiliated Labour Cooperative Societies. New verified workers will appear here once authorized by cooperative officers.
+              </p>
+            </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
               <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
@@ -390,7 +416,7 @@ export const ServiceSearchCatalog: React.FC = () => {
               </p>
               <button
                 onClick={resetFilters}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-emerald-700 transition-colors"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-emerald-700 transition-colors cursor-pointer"
               >
                 {t('resetFilters')}
               </button>

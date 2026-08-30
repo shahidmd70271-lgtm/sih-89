@@ -16,8 +16,17 @@ import { useApp } from '../../context/AppContext';
 import { AvailabilitySlot } from '../../types';
 
 export const WorkerScheduleView: React.FC = () => {
-  const { workers, toggleWorkerSlot, setWorkerSlotAvailability, t } = useApp();
-  const worker = workers[0]; // Ravi Kumar
+  const { currentWorker, workers, toggleWorkerSlot, setWorkerSlotAvailability, t } = useApp();
+  const worker = currentWorker;
+
+  if (!worker) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
+        <h3 className="text-lg font-bold text-slate-900">No Worker Profile Found</h3>
+        <p className="text-xs text-slate-500">Please register or log in with your worker credentials.</p>
+      </div>
+    );
+  }
 
   const [workingDays, setWorkingDays] = useState<string[]>(
     worker.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']

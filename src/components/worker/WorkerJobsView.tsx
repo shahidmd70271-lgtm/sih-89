@@ -39,10 +39,21 @@ export const WorkerJobsView: React.FC<WorkerJobsViewProps> = ({ initialTab = 'pe
     setActiveBookingById,
     setIsCallModalOpen,
     setIsMessagesModalOpen,
+    currentWorker,
     t,
   } = useApp();
 
-  const worker = workers[0]; // Current worker (Ravi Kumar)
+  const worker = currentWorker;
+
+  if (!worker) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
+        <h3 className="text-lg font-bold text-slate-900">No Worker Profile Found</h3>
+        <p className="text-xs text-slate-500">Please register or log in with your worker credentials.</p>
+      </div>
+    );
+  }
+
   const [activeTab, setActiveTab] = useState<'pending' | 'accepted' | 'completed' | 'rejected'>(initialTab);
 
   // Modals state
@@ -56,22 +67,30 @@ export const WorkerJobsView: React.FC<WorkerJobsViewProps> = ({ initialTab = 'pe
   );
 
   const pendingBookings = allWorkerBookings.filter(
-    (b) => b.status === 'Pending' || b.status === 'Waiting for Response'
+    (b) => b.status === 'requested' || b.status === 'Pending' || b.status === 'Waiting for Response'
   );
 
   const acceptedBookings = allWorkerBookings.filter(
     (b) =>
+      b.status === 'accepted' ||
       b.status === 'Worker Accepted' ||
       b.status === 'Worker Travelling' ||
+      b.status === 'travelling' ||
       b.status === 'Worker Arrived' ||
+      b.status === 'arrived' ||
+      b.status === 'in_progress' ||
       b.status === 'Service In Progress' ||
       b.status === 'Confirmed' ||
       b.status === 'Scheduled'
   );
 
-  const completedBookings = allWorkerBookings.filter((b) => b.status === 'Completed');
+  const completedBookings = allWorkerBookings.filter(
+    (b) => b.status === 'completed' || b.status === 'Completed' || b.status === 'paid'
+  );
 
-  const rejectedBookings = allWorkerBookings.filter((b) => b.status === 'Worker Rejected');
+  const rejectedBookings = allWorkerBookings.filter(
+    (b) => b.status === 'rejected' || b.status === 'Worker Rejected'
+  );
 
   const handleOpenAcceptModal = (booking: Booking) => {
     setAcceptModalBooking(booking);

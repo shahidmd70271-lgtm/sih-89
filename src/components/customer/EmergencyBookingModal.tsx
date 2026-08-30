@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ServiceType, Worker, Booking } from '../../types';
+import { OpenStreetMapView, LocationCoordinates } from '../maps/OpenStreetMapView';
 
 export const EmergencyBookingModal: React.FC = () => {
   const {
@@ -30,8 +31,9 @@ export const EmergencyBookingModal: React.FC = () => {
   const [selectedEmergencyCategory, setSelectedEmergencyCategory] = useState<ServiceType>('Plumbing');
   const [isScanning, setIsScanning] = useState(false);
   const [matchedWorkers, setMatchedWorkers] = useState<Worker[]>([]);
-  const [address, setAddress] = useState('Flat 402, Nilgiri Apartments, Sector 14');
-  const [notes, setNotes] = useState('Urgent pipeline burst causing flooding in kitchen.');
+  const [address, setAddress] = useState('');
+  const [coordinates, setCoordinates] = useState<LocationCoordinates | null>(null);
+  const [notes, setNotes] = useState('');
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
 
   if (!isEmergencyModalOpen) return null;
@@ -63,27 +65,51 @@ export const EmergencyBookingModal: React.FC = () => {
     },
   ];
 
+  const handleLocationSelected = (loc: LocationCoordinates) => {
+    setCoordinates(loc);
+    if (loc.address) {
+      setAddress(loc.address);
+    }
+  };
+
   const handleScanForNearest = () => {
     setIsScanning(true);
 
     setTimeout(() => {
+      const isAvailableVerifiedWorker = (w: Worker) =>
+        Boolean(
+          w.isVerified &&
+          (w.verificationStatus === 'Verified' || w.verificationStatus === 'approved') &&
+          !(w as any).is_removed &&
+          (w as any).status !== 'removed' &&
+          (w as any).status !== 'inactive'
+        );
+
       const available = workers
-        .filter((w) => w.isVerified && (w.skill === selectedEmergencyCategory || w.secondarySkills?.includes(selectedEmergencyCategory)))
+        .filter(
+          (w) =>
+            isAvailableVerifiedWorker(w) &&
+            w.skill === selectedEmergencyCategory &&
+            (w.availability === 'Available Now' || w.emergencyAvailable)
+        )
         .sort((a, b) => a.distanceKm - b.distanceKm)
         .slice(0, 3);
 
-      setMatchedWorkers(available.length > 0 ? available : workers.slice(0, 2));
+      setMatchedWorkers(available);
       setIsScanning(false);
     }, 800);
   };
 
-  const handleInstantDispatch = (worker: Worker) => {
-    const booking = createNewBooking({
+  const handleInstantDispatch = async (worker: Worker) => {
+    const booking = await createNewBooking({
       workerId: worker.id,
-      customerAddress: address,
+      customerAddress: address.trim() || coordinates?.address || 'Current Location',
+      latitude: coordinates?.lat,
+      longitude: coordinates?.lng,
+      customerCoordinates: coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : undefined,
       date: 'Today (Immediate SOS)',
       timeSlot: 'Immediate (Next 30 Mins)',
-      problemDescription: `[EMERGENCY SOS] ${selectedEmergencyCategory}: ${notes}`,
+      problemDescription: `[EMERGENCY SOS] ${selectedEmergencyCategory}: ${notes || 'Immediate assistance requested'}`,
       estimatedPrice: worker.basePricePerHour,
       isEmergency: true,
     });
@@ -278,6 +304,18 @@ export const EmergencyBookingModal: React.FC = () => {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Emergency OpenStreetMap Location View */}
+            <div className="space-y-2">
+              <OpenStreetMapView
+                selectedLocation={coordinates}
+                onLocationSelect={handleLocationSelected}
+                interactiveSelect={true}
+                searchable={true}
+                destinationLabel="Emergency SOS Location"
+                height="180px"
+              />
             </div>
 
             {/* Current Address & Problem Note */}

@@ -14,7 +14,16 @@ import { useApp } from '../../context/AppContext';
 export const AdminSidebar: React.FC = () => {
   const { activeView, setActiveView, workers, t } = useApp();
 
-  const pendingCount = workers.filter((w) => !w.isVerified).length;
+  const pendingCount = workers.filter(
+    (w) =>
+      !w.isVerified &&
+      w.verificationStatus !== 'Rejected' &&
+      w.verificationStatus !== 'rejected' &&
+      w.verificationStatus !== 'Removed' &&
+      w.verificationStatus !== 'Inactive' &&
+      (w as any).status !== 'removed' &&
+      (w as any).status !== 'inactive'
+  ).length;
 
   const navItems = [
     { id: 'admin-dashboard', label: t('navOverview'), icon: LayoutDashboard },

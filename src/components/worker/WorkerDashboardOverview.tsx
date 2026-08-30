@@ -33,10 +33,34 @@ export const WorkerDashboardOverview: React.FC = () => {
     rejectBookingByWorker,
     isWorkerOnline,
     setIsWorkerOnline,
+    currentWorker,
     t,
   } = useApp();
 
-  const worker = workers[0]; // Ravi Kumar
+  const worker = currentWorker;
+
+  if (!worker) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
+        <h3 className="text-lg font-bold text-slate-900">No Worker Profile Found</h3>
+        <p className="text-xs text-slate-500">Please register or log in with your worker mobile number.</p>
+      </div>
+    );
+  }
+
+  // Real paid bookings for this worker
+  const paidBookings = bookings.filter(
+    (b) =>
+      b.workerId === worker.id &&
+      (b.paymentStatus === 'paid' ||
+        b.paymentStatus === 'Settled to Worker' ||
+        b.status === 'paid' ||
+        b.status === 'completed' ||
+        b.status === 'Completed')
+  );
+
+  const realEarnings = paidBookings.reduce((sum, b) => sum + (b.totalAmount || b.estimatedPrice || 0), 0);
+  const realWelfareBalance = Math.round(realEarnings * 0.05);
 
   // Modals state
   const [selectedAcceptBooking, setSelectedAcceptBooking] = useState<Booking | null>(null);
@@ -46,15 +70,19 @@ export const WorkerDashboardOverview: React.FC = () => {
   const pendingRequests = bookings.filter(
     (b) =>
       (b.workerId === worker.id || (b.isEmergency && b.serviceType === worker.skill)) &&
-      (b.status === 'Pending' || b.status === 'Waiting for Response')
+      (b.status === 'requested' || b.status === 'Pending' || b.status === 'Waiting for Response')
   );
 
   const acceptedJobs = bookings.filter(
     (b) =>
       b.workerId === worker.id &&
-      (b.status === 'Worker Accepted' ||
+      (b.status === 'accepted' ||
+        b.status === 'Worker Accepted' ||
         b.status === 'Worker Travelling' ||
+        b.status === 'travelling' ||
         b.status === 'Worker Arrived' ||
+        b.status === 'arrived' ||
+        b.status === 'in_progress' ||
         b.status === 'Service In Progress' ||
         b.status === 'Confirmed' ||
         b.status === 'Scheduled')
@@ -122,7 +150,7 @@ export const WorkerDashboardOverview: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold mb-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>{t('labourCoopId')}: NLCF-DL-VER-4019</span>
+            <span>{t('labourCoopId')}: {worker.applicationId || 'NLCF-DL-089'}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white">
             {t('goodMorningWorker', { name: worker.name })} ☀️
@@ -137,7 +165,7 @@ export const WorkerDashboardOverview: React.FC = () => {
             <span className="text-[10px] uppercase font-bold text-emerald-400 block">
               {t('coopWelfareBalance')}
             </span>
-            <span className="text-base font-black text-white font-mono">₹14,820</span>
+            <span className="text-base font-black text-white font-mono">₹{realWelfareBalance.toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
@@ -189,7 +217,7 @@ export const WorkerDashboardOverview: React.FC = () => {
             </span>
             <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-2xl font-black text-emerald-700">₹1,850</div>
+          <div className="text-2xl font-black text-emerald-700">₹{realEarnings.toLocaleString('en-IN')}</div>
           <div className="text-[11px] text-slate-500 font-medium mt-1">
             {t('settlesToBank')}
           </div>
@@ -203,9 +231,9 @@ export const WorkerDashboardOverview: React.FC = () => {
             </span>
             <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
           </div>
-          <div className="text-2xl font-black text-slate-900">{worker.rating}</div>
+          <div className="text-2xl font-black text-slate-900">{worker.rating || 5.0}</div>
           <div className="text-[11px] text-slate-500 font-medium mt-1">
-            {t('basedOnAudits', { count: worker.reviewsCount })}
+            {t('basedOnAudits', { count: worker.reviewsCount || 0 })}
           </div>
         </div>
       </div>

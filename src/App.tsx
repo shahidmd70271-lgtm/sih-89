@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
+import { HardHat, Building2 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
+
+// Auth Modals
+import { CustomerAuthModal } from './components/auth/CustomerAuthModal';
+import { AdminAuthModal } from './components/auth/AdminAuthModal';
+import { WorkerAuthModal } from './components/auth/WorkerAuthModal';
 
 // Landing Page Components
 import { HeroSection } from './components/landing/HeroSection';
@@ -40,10 +46,17 @@ import { AdminAIDemandForecast } from './components/admin/AdminAIDemandForecast'
 
 function AppContent() {
   const {
+    currentUser,
     currentRole,
     activeView,
     isWorkerJoinModalOpen,
     setIsWorkerJoinModalOpen,
+    isCustomerAuthModalOpen,
+    setIsCustomerAuthModalOpen,
+    isAdminAuthModalOpen,
+    setIsAdminAuthModalOpen,
+    isWorkerAuthModalOpen,
+    setIsWorkerAuthModalOpen,
   } = useApp();
 
   // Render Customer Views
@@ -102,6 +115,11 @@ function AppContent() {
     }
   };
 
+  const isAuthorizedAdmin = currentUser?.role === 'admin';
+  const isAuthorizedWorker =
+    currentUser?.role === 'worker' &&
+    (currentUser?.workerStatus === 'Verified' || currentUser?.workerStatus === 'approved');
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased selection:bg-emerald-500 selection:text-white">
       {/* Universal Header & Role Switcher */}
@@ -116,7 +134,69 @@ function AppContent() {
             <PopularServicesSection />
             <WhySahaayakSection />
           </div>
-        ) : currentRole === 'customer' ? (
+        ) : activeView.startsWith('admin-') || currentRole === 'admin' ? (
+          /* ADMIN DASHBOARD WITH SIDEBAR (Protected) */
+          isAuthorizedAdmin ? (
+            <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
+              <AdminSidebar />
+              <div className="flex-1 overflow-y-auto bg-slate-50">
+                {renderAdminView()}
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 max-w-lg mx-auto my-16 bg-white rounded-3xl border border-red-200 shadow-xl text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center mx-auto">
+                <Building2 className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">Restricted Administrator Portal</h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                You are not authorized to access the administrator portal. Official NLCF verification officer authentication is required.
+              </p>
+              <div className="pt-2">
+                <button
+                  onClick={() => setIsAdminAuthModalOpen(true)}
+                  className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer"
+                >
+                  Administrator Sign In
+                </button>
+              </div>
+            </div>
+          )
+        ) : activeView.startsWith('worker-') || currentRole === 'worker' ? (
+          /* WORKER DASHBOARD WITH SIDEBAR (Protected) */
+          isAuthorizedWorker ? (
+            <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
+              <WorkerSidebar />
+              <div className="flex-1 overflow-y-auto bg-slate-50">
+                {renderWorkerView()}
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 max-w-lg mx-auto my-16 bg-white rounded-3xl border border-amber-200 shadow-xl text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+                <HardHat className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">Worker Portal Verification Required</h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Access to the active worker control desk is reserved for approved Labour Cooperative tradespersons with valid authenticated credentials.
+              </p>
+              <div className="flex justify-center gap-3 pt-2">
+                <button
+                  onClick={() => setIsWorkerAuthModalOpen(true)}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Sign In as Worker
+                </button>
+                <button
+                  onClick={() => setIsWorkerJoinModalOpen(true)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Join as Worker
+                </button>
+              </div>
+            </div>
+          )
+        ) : (
           /* CUSTOMER DASHBOARD WITH SIDEBAR */
           <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
             <CustomerSidebar />
@@ -124,24 +204,22 @@ function AppContent() {
               {renderCustomerView()}
             </div>
           </div>
-        ) : currentRole === 'worker' ? (
-          /* WORKER DASHBOARD WITH SIDEBAR */
-          <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
-            <WorkerSidebar />
-            <div className="flex-1 overflow-y-auto bg-slate-50">
-              {renderWorkerView()}
-            </div>
-          </div>
-        ) : (
-          /* ADMIN DASHBOARD WITH SIDEBAR */
-          <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
-            <AdminSidebar />
-            <div className="flex-1 overflow-y-auto bg-slate-50">
-              {renderAdminView()}
-            </div>
-          </div>
         )}
       </main>
+
+      {/* Role-Based Authentication & Registration Modals */}
+      <CustomerAuthModal
+        isOpen={isCustomerAuthModalOpen}
+        onClose={() => setIsCustomerAuthModalOpen(false)}
+      />
+      <AdminAuthModal
+        isOpen={isAdminAuthModalOpen}
+        onClose={() => setIsAdminAuthModalOpen(false)}
+      />
+      <WorkerAuthModal
+        isOpen={isWorkerAuthModalOpen}
+        onClose={() => setIsWorkerAuthModalOpen(false)}
+      />
 
       {/* Global Interactive Modals */}
       <WorkerProfileModal />

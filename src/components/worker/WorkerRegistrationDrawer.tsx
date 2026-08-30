@@ -55,22 +55,22 @@ const INDIAN_STATES = [
 
 const SAMPLE_AVATARS = [
   {
-    name: 'Ramesh Singh',
+    name: 'Photo Preset 1',
     url: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400&auto=format&fit=crop&q=80',
     gender: 'Male',
   },
   {
-    name: 'Sunita Devi',
+    name: 'Photo Preset 2',
     url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
     gender: 'Female',
   },
   {
-    name: 'Rajesh Kumar',
+    name: 'Photo Preset 3',
     url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
     gender: 'Male',
   },
   {
-    name: 'Meena Sharma',
+    name: 'Photo Preset 4',
     url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
     gender: 'Female',
   },
@@ -108,39 +108,38 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
 
   // STEP 1 — PERSONAL DETAILS
   const [fullName, setFullName] = useState('');
-  const [dob, setDob] = useState('1992-06-15');
+  const [dob, setDob] = useState('');
   const [gender, setGender] = useState('Male');
   const [mobileNumber, setMobileNumber] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(SAMPLE_AVATARS[0].url);
 
   // STEP 2 — ADDRESS & LOCATION
   const [houseNumber, setHouseNumber] = useState('');
   const [streetLocality, setStreetLocality] = useState('');
-  const [cityTown, setCityTown] = useState('Gurugram');
-  const [district, setDistrict] = useState('Gurugram');
-  const [stateName, setStateName] = useState('Haryana');
-  const [pinCode, setPinCode] = useState('122001');
+  const [cityTown, setCityTown] = useState('');
+  const [district, setDistrict] = useState('');
+  const [stateName, setStateName] = useState('Delhi (NCT)');
+  const [pinCode, setPinCode] = useState('');
 
   // STEP 3 — SKILLS & PROFESSIONAL DETAILS
   const [primarySkill, setPrimarySkill] = useState<ServiceType>('Plumbing');
-  const [secondarySkills, setSecondarySkills] = useState<ServiceType[]>(['Appliance Repair']);
-  const [experienceYears, setExperienceYears] = useState(6);
+  const [secondarySkills, setSecondarySkills] = useState<ServiceType[]>([]);
+  const [experienceYears, setExperienceYears] = useState(3);
   const [basePricePerHour, setBasePricePerHour] = useState(250);
   const [languages, setLanguages] = useState<string[]>(['Hindi', 'English']);
-  const [bio, setBio] = useState(
-    'Experienced certified professional with over 6 years of expertise in residential and commercial plumbing installations, leak repairs, and pipe maintenance.'
-  );
+  const [bio, setBio] = useState('');
 
   // STEP 4 — CERTIFICATION & VERIFICATION
   const [cooperativeName, setCooperativeName] = useState(COOPERATIVE_SOCIETIES[0].name);
-  const [membershipId, setMembershipId] = useState('COOP-DL-2026-4892');
-  const [aadhaarRaw, setAadhaarRaw] = useState('5849 2018 7741');
+  const [membershipId, setMembershipId] = useState('');
+  const [aadhaarRaw, setAadhaarRaw] = useState('');
   const [addressProofType, setAddressProofType] = useState('Voter ID Card');
   const [documents, setDocuments] = useState<WorkerDocument[]>([
     {
       id: 'doc-1',
-      name: 'Skill_Competency_Certificate_NSDC.pdf',
+      name: 'Skill_Competency_Certificate.pdf',
       type: 'Skill Certificate',
       fileSize: '1.8 MB',
       verified: false,
@@ -148,7 +147,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
     },
     {
       id: 'doc-2',
-      name: 'Prior_Experience_Letter_Guild.pdf',
+      name: 'Prior_Experience_Letter.pdf',
       type: 'Experience Certificate',
       fileSize: '950 KB',
       verified: false,
@@ -168,27 +167,25 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
   const [workSamples, setWorkSamples] = useState<WorkSample[]>([
     {
       id: 'ws-1',
-      title: 'Bathroom Main Line Plumbing',
+      title: 'Precision Work Sample 1',
       imageUrl: SAMPLE_WORK_PHOTOS[0].imageUrl,
       description: SAMPLE_WORK_PHOTOS[0].description,
     },
     {
       id: 'ws-2',
-      title: 'Kitchen Drainage System',
+      title: 'Precision Work Sample 2',
       imageUrl: SAMPLE_WORK_PHOTOS[1].imageUrl,
-      description: 'Under-sink water purifier and trap valve installation.',
+      description: SAMPLE_WORK_PHOTOS[1].description,
     },
   ]);
-  const [workDescription, setWorkDescription] = useState(
-    'Have completed over 350 residential jobs across Delhi NCR including leak detection, pipeline fitting, geyser connection, and bathroom fixture overhauls.'
-  );
+  const [workDescription, setWorkDescription] = useState('');
 
   // STEP 6 — COOPERATIVE & WELFARE
-  const [emergencyName, setEmergencyName] = useState('Kamla Devi');
-  const [emergencyPhone, setEmergencyPhone] = useState('98111 22334');
+  const [emergencyName, setEmergencyName] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
   const [emergencyRelation, setEmergencyRelation] = useState('Spouse');
   const [insuranceMembership, setInsuranceMembership] = useState('ESI & PM-SYM Welfare Scheme');
-  const [insurancePolicyNumber, setInsurancePolicyNumber] = useState('ESI-REG-994182');
+  const [insurancePolicyNumber, setInsurancePolicyNumber] = useState('');
 
   // STEP 7 — SECURITY & CONSENT
   const [consentAccuracy, setConsentAccuracy] = useState(true);
@@ -386,6 +383,10 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
         missing.push('Email (must end with @gmail.com)');
         if (!customErrorMsg) customErrorMsg = 'Please enter a valid email';
       }
+      if (!accountPassword.trim() || accountPassword.length < 4) {
+        missing.push('Account Password (min 4 characters)');
+        if (!customErrorMsg) customErrorMsg = 'Please enter a secure password for your worker account.';
+      }
       if (!avatarUrl) {
         missing.push('Profile Photo');
       }
@@ -465,18 +466,19 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateCurrentStep()) return;
 
     setIsSubmitting(true);
+    setErrorMessage('');
 
-    setTimeout(() => {
+    try {
       const coopObj = COOPERATIVE_SOCIETIES.find((c) => c.name === cooperativeName) || COOPERATIVE_SOCIETIES[0];
       const approxLocation = `${streetLocality ? streetLocality + ', ' : ''}${cityTown}, ${stateName}`;
 
-      const createdWorker = addNewWorker({
-        name: fullName || 'Ramesh Singh',
+      const createdWorker = await addNewWorker({
+        name: fullName.trim() || 'Worker Applicant',
         avatar: avatarUrl,
         skill: primarySkill,
         secondarySkills,
@@ -490,7 +492,8 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
         languages,
         dob,
         gender,
-        email: emailAddress,
+        email: emailAddress.trim().toLowerCase(),
+        password: accountPassword.trim(),
         address: {
           houseNumber,
           street: streetLocality,
@@ -516,7 +519,6 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
         verificationDocType: `${coopObj.name} Attested Dossier`,
       });
 
-      setIsSubmitting(false);
       setSubmittedWorkerData({
         id: createdWorker.id,
         applicationId: createdWorker.applicationId || 'SHK-WKR-2026-8492',
@@ -526,7 +528,11 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
         appliedDate: createdWorker.appliedDate || 'Today',
       });
       setCurrentStep(8); // Success View
-    }, 600);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Worker application registration failed. Please check your credentials and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResetAndClose = () => {
@@ -778,7 +784,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
                       setFullName(e.target.value);
                       if (errorMessage) setErrorMessage('');
                     }}
-                    placeholder="e.g. Ramesh Chandra Singh"
+                    placeholder="Enter your full legal name as per Aadhaar"
                     className={`w-full text-xs bg-slate-50 border rounded-xl py-2.5 pl-9 pr-3 text-slate-900 focus:bg-white font-medium ${
                       attemptedSteps[1] && !fullName.trim()
                         ? 'border-red-400 ring-2 ring-red-200 bg-red-50/20 focus:outline-red-500'
@@ -920,6 +926,29 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
                         : 'border-slate-200 focus:outline-emerald-500'
                     }`}
                   />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-slate-700">
+                      Account Password <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">Used for secure worker portal sign in</span>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="password"
+                      required
+                      value={accountPassword}
+                      onChange={(e) => {
+                        setAccountPassword(e.target.value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
+                      placeholder="Enter a secure account password (min 4 chars)"
+                      className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-9 pr-3 text-slate-900 focus:bg-white font-medium focus:outline-emerald-500"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1651,7 +1680,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
                         setEmergencyName(e.target.value);
                         if (errorMessage) setErrorMessage('');
                       }}
-                      placeholder="e.g. Kamla Devi"
+                      placeholder="Enter emergency contact person's name"
                       className={`w-full text-xs bg-slate-50 border rounded-xl p-2.5 text-slate-900 focus:bg-white ${
                         attemptedSteps[6] && !emergencyName.trim()
                           ? 'border-red-400 ring-2 ring-red-200 bg-red-50/20 focus:outline-red-500'
@@ -1769,7 +1798,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <span className="text-slate-400 text-[11px] block">Applicant Name</span>
-                    <strong className="text-slate-900">{fullName || 'Ramesh Singh'}</strong>
+                    <strong className="text-slate-900">{fullName.trim() || 'Applicant'}</strong>
                   </div>
                   <div>
                     <span className="text-slate-400 text-[11px] block">Primary Trade</span>

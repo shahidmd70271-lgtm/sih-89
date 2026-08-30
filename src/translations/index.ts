@@ -385,7 +385,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     sortPrice: 'Lowest Price',
     sortAvailable: 'Available Now First',
     showingWorkersCount: 'Showing {count} verified workers',
-    noWorkersFound: 'No cooperative workers match your filter criteria.',
+    noWorkersFoundFilter: 'No cooperative workers match your filter criteria.',
     adjustFiltersPrompt: 'Try adjusting your filters, location radius, or search keywords.',
 
     // Live Tracking Page
@@ -547,7 +547,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     joinWorkerModalTitle: 'Register as a Cooperative Shramik Member',
     joinWorkerModalSubtitle: 'Join a registered Labour Cooperative Society for fair wages, insurance & steady work',
     fullName: 'Full Name (as per Aadhaar)',
-    fullNamePlaceholder: 'e.g. Ramesh Kumar',
+    fullNamePlaceholder: 'Enter full legal name as per Aadhaar',
     phoneLabel: 'Mobile Number',
     phonePlaceholder: '+91 98765 00000',
     tradeSkillSelect: 'Primary Trade Skill',
@@ -754,9 +754,41 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     footerEmail: 'support@sahaayak-coop.gov.in',
     footerAddress: 'Cooperative Bhawan, Institutional Area, New Delhi - 110001',
     footerCopyright: '© 2026 Sahaayak Cooperative Platform. Developed for SIH 2026.',
-    footerFairWages: 'Fair Wages Guaranteed',
-    footerSocialWelfare: 'Social Welfare Compliant',
-    footerZeroCommission: 'Zero Exploitative Commission',
+    // Profile & Form Labels
+    myProfessionalProfileTitle: 'My Professional Profile',
+    myProfessionalProfileSub: 'Manage your verified worker information and trade settings',
+    shramikProfileDossier: 'Worker Profile Dossier',
+    profileSavedSuccess: 'Profile details saved successfully.',
+    cooperativeSocietyAttested: 'Cooperative Society Attested',
+    cooperativeLabel: 'Labour Cooperative',
+    govtCoopReg: 'Govt Reg',
+    fullLegalName: 'Full Legal Name',
+    primaryTradeSkill: 'Primary Trade Skill',
+    yearsExperience: 'Years of Experience',
+    dailyWorkingHours: 'Daily Working Hours',
+    professionalBio: 'Professional Bio',
+    professionalBioCitizens: 'Professional Bio (Visible to Citizens)',
+    directWageBankAccount: 'Direct Wage Settlement Bank Account',
+    bankName: 'Bank Name',
+    accountNumber: 'Account Number',
+    ifscCode: 'IFSC Code',
+    updateProfile: 'Update Profile',
+    personalWelfareFund: 'Personal Welfare Fund',
+    activeWorkersAvailable: 'Workers Available',
+    customerRating: 'Customer Rating',
+
+    // Empty States
+    noWorkersFound: 'No verified workers available yet.',
+    noWorkersFoundSub: 'New skilled cooperative workers will appear here once verified by the Admin desk.',
+    noBookingsYet: 'No bookings yet.',
+    noBookingsSub: 'Your service bookings will appear here once requested.',
+    noVerificationRequests: 'No worker verification requests.',
+    noVerificationRequestsSub: 'All submitted worker dossiers have been audited and cleared.',
+    noPaidJobsYet: 'No completed paid jobs yet.',
+    noPaidJobsSub: 'Your take-home earnings will update as completed bookings are confirmed and paid.',
+    noNotificationsYet: 'No new notifications.',
+    noNotificationsSub: 'Booking alerts and system notices will appear here.',
+
     portalsAndViews: 'Portals & Views',
     cooperativeGuilds: 'Cooperative Guilds',
     nlcfIndia: 'NLCF India',
@@ -1296,7 +1328,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     joinWorkerModalTitle: 'सहकारी श्रमिक सदस्य के रूप में पंजीकरण',
     joinWorkerModalSubtitle: 'उचित मजदूरी, बीमा और नियमित कार्य हेतु पंजीकृत श्रम सहकारी समिति से जुड़ें',
     fullName: 'पूरा नाम (आधार अनुसार)',
-    fullNamePlaceholder: 'उदा. रमेश कुमार',
+    fullNamePlaceholder: 'आधार अनुसार पूरा नाम दर्ज करें',
     phoneLabel: 'मोबाइल नंबर',
     phonePlaceholder: '+91 98765 00000',
     tradeSkillSelect: 'मुख्य ट्रेड / कौशल',
@@ -2045,7 +2077,7 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
     joinWorkerModalTitle: 'కోఆపరేటివ్ శ్రామిక్ సభ్యుడిగా నమోదు చేసుకోండి',
     joinWorkerModalSubtitle: 'న్యాయమైన వేతనాలు, బీమా మరియు నిరంతర పని కోసం రిజిస్టర్డ్ లేబర్ కోఆపరేటివ్ సొసైటీలో చేరండి',
     fullName: 'పూర్తి పేరు (ఆధార్ ప్రకారం)',
-    fullNamePlaceholder: 'ఉదా. రమేష్ కుమార్',
+    fullNamePlaceholder: 'ఆధార్ ప్రకారం పూర్తి పేరును నమోదు చేయండి',
     phoneLabel: 'మొబైల్ నంబర్',
     phonePlaceholder: '+91 98765 00000',
     tradeSkillSelect: 'ప్రధాన వృత్తి / నైపుణ్యం',
@@ -2264,13 +2296,21 @@ export const translations: Record<LanguageCode, Record<string, string>> = {
   },
 };
 
+function humanizeKey(k: string): string {
+  return k
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .replace(/^\w/, (c) => c.toUpperCase())
+    .trim();
+}
+
 export function translate(
   lang: LanguageCode,
   key: string,
   params?: TranslationParams
 ): string {
   const dict = translations[lang] || translations.en;
-  let text = dict[key] || translations.en[key] || key;
+  let text = dict[key] || translations.en[key] || humanizeKey(key);
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));

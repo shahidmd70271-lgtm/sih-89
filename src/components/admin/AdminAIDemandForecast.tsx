@@ -17,11 +17,20 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const AdminAIDemandForecast: React.FC = () => {
-  const { t } = useApp();
+  const { workers, t } = useApp();
   const [forecastHorizon, setForecastHorizon] = useState<'48h' | '7d' | '30d'>('48h');
   const [selectedZone, setSelectedZone] = useState('South Urban Zone');
   const [isMobilizing, setIsMobilizing] = useState(false);
   const [mobilizedSuccess, setMobilizedSuccess] = useState(false);
+
+  const approvedWorkers = workers.filter(
+    (w) => w.isVerified || w.verificationStatus === 'Verified' || w.verificationStatus === 'approved'
+  );
+
+  const getWorkerCountForTrade = (tradeSkill: string, baseline = 0) => {
+    const realCount = approvedWorkers.filter((w) => w.skill === tradeSkill).length;
+    return realCount > 0 ? realCount : baseline;
+  };
 
   const forecastData = [
     {
@@ -31,9 +40,9 @@ export const AdminAIDemandForecast: React.FC = () => {
       severity: 'high',
       reasonKey: 'electricianForecastReason',
       reasonFallback: 'Predicted heatwave & AC transformer surge over the weekend',
-      activeWorkersAvailable: 42,
-      recommendedCapacity: 60,
-      shortage: 18,
+      activeWorkersAvailable: getWorkerCountForTrade('Electrical', 0),
+      recommendedCapacity: Math.max(getWorkerCountForTrade('Electrical', 0) + 12, 15),
+      shortage: Math.max(15 - getWorkerCountForTrade('Electrical', 0), 0),
     },
     {
       tradeKey: 'service_Plumber',
@@ -42,9 +51,9 @@ export const AdminAIDemandForecast: React.FC = () => {
       severity: 'high',
       reasonKey: 'plumberForecastReason',
       reasonFallback: 'Municipal pipeline pressure maintenance scheduled in South Zone',
-      activeWorkersAvailable: 35,
-      recommendedCapacity: 48,
-      shortage: 13,
+      activeWorkersAvailable: getWorkerCountForTrade('Plumbing', 0),
+      recommendedCapacity: Math.max(getWorkerCountForTrade('Plumbing', 0) + 8, 12),
+      shortage: Math.max(12 - getWorkerCountForTrade('Plumbing', 0), 0),
     },
     {
       tradeKey: 'service_ApplianceRepair',
@@ -53,9 +62,9 @@ export const AdminAIDemandForecast: React.FC = () => {
       severity: 'medium',
       reasonKey: 'applianceForecastReason',
       reasonFallback: 'Seasonal refrigerator & geyser breakdown frequency',
-      activeWorkersAvailable: 28,
-      recommendedCapacity: 34,
-      shortage: 6,
+      activeWorkersAvailable: getWorkerCountForTrade('Appliance Repair', 0),
+      recommendedCapacity: Math.max(getWorkerCountForTrade('Appliance Repair', 0) + 5, 8),
+      shortage: Math.max(8 - getWorkerCountForTrade('Appliance Repair', 0), 0),
     },
     {
       tradeKey: 'service_Carpentry',
@@ -64,9 +73,9 @@ export const AdminAIDemandForecast: React.FC = () => {
       severity: 'low',
       reasonKey: 'carpentryForecastReason',
       reasonFallback: 'Stable baseline residential maintenance',
-      activeWorkersAvailable: 24,
-      recommendedCapacity: 25,
-      shortage: 1,
+      activeWorkersAvailable: getWorkerCountForTrade('Carpentry', 0),
+      recommendedCapacity: Math.max(getWorkerCountForTrade('Carpentry', 0) + 2, 5),
+      shortage: Math.max(5 - getWorkerCountForTrade('Carpentry', 0), 0),
     },
   ];
 

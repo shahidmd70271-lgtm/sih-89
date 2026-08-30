@@ -68,9 +68,9 @@ export const PopularServicesSection: React.FC = () => {
                       <ServiceIcon name={cat.id} className="w-6 h-6" />
                     </div>
 
-                    <div className="flex items-center gap-1 px-2 py-1 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 text-xs font-bold">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      <span>{cat.avgRating}</span>
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{t('verified')}</span>
                     </div>
                   </div>
 
@@ -94,7 +94,7 @@ export const PopularServicesSection: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1 text-emerald-700 font-semibold group-hover:translate-x-1 transition-transform">
-                    <span>{cat.activeWorkers} {t('online')}</span>
+                    <span>{t('bookService')}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </div>
                 </div>

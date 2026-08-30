@@ -14,8 +14,23 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const WorkerWelfareSection: React.FC = () => {
-  const { workers, t } = useApp();
-  const worker = workers[0]; // Ravi Kumar
+  const { currentWorker, workers, bookings, t } = useApp();
+  const worker = currentWorker || workers[0];
+
+  const paidBookings = worker
+    ? bookings.filter(
+        (b) =>
+          b.workerId === worker.id &&
+          (b.paymentStatus === 'paid' ||
+            b.paymentStatus === 'Settled to Worker' ||
+            b.status === 'paid' ||
+            b.status === 'completed' ||
+            b.status === 'Completed')
+      )
+    : [];
+
+  const realGrossEarnings = paidBookings.reduce((sum, b) => sum + (b.totalAmount || b.estimatedPrice || 0), 0);
+  const realWelfareFund = Math.round(realGrossEarnings * 0.05);
 
   const [claimSubmitted, setClaimSubmitted] = useState(false);
 
@@ -74,7 +89,7 @@ export const WorkerWelfareSection: React.FC = () => {
             {t('nlcfIndia')}
           </span>
           <h2 className="text-2xl sm:text-3xl font-black text-white">
-            {t('personalWelfareFund')}: ₹14,820
+            {t('personalWelfareFund')}: ₹{realWelfareFund.toLocaleString('en-IN')}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300">
             {t('welfareFundDesc')}

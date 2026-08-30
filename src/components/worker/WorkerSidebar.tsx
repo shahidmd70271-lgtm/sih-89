@@ -15,8 +15,8 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const WorkerSidebar: React.FC = () => {
-  const { activeView, setActiveView, workers, activeBooking, t } = useApp();
-  const worker = workers[0]; // Ravi Kumar (Plumber)
+  const { activeView, setActiveView, currentWorker, workers, activeBooking, t } = useApp();
+  const worker = currentWorker || workers[0];
 
   const navItems = [
     { id: 'worker-dashboard', label: t('navDashboard'), icon: LayoutDashboard },
@@ -37,18 +37,25 @@ export const WorkerSidebar: React.FC = () => {
         <div className="p-3.5 bg-slate-800/90 rounded-2xl border border-slate-700 flex items-center gap-3">
           <div className="relative">
             <img
-              src={worker.avatar}
-              alt={worker.name}
+              src={
+                worker?.avatar ||
+                'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400&auto=format&fit=crop&q=80'
+              }
+              alt={worker?.name || 'Worker'}
               className="w-11 h-11 rounded-xl object-cover border border-emerald-400"
             />
             <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-900"></span>
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1">
-              <h4 className="text-xs font-bold text-white truncate">{worker.name}</h4>
+              <h4 className="text-xs font-bold text-white truncate">
+                {worker?.name || 'Cooperative Shramik'}
+              </h4>
               <span className="text-[9px] text-emerald-400 font-bold">✓</span>
             </div>
-            <p className="text-[11px] text-slate-400 truncate">{t(`service_${worker.skill.replace(/\s+/g, '')}`)} {t('specialist')}</p>
+            <p className="text-[11px] text-slate-400 truncate">
+              {worker?.skill ? `${t(`service_${worker.skill.replace(/\s+/g, '')}`)} ${t('specialist')}` : 'Verified Trade Specialist'}
+            </p>
             <span className="text-[9px] text-emerald-400 font-medium">● {t('dutyActive')}</span>
           </div>
         </div>

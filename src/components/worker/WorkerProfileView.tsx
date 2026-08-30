@@ -15,14 +15,23 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const WorkerProfileView: React.FC = () => {
-  const { workers, t } = useApp();
-  const worker = workers[0]; // Ravi Kumar
+  const { currentWorker, workers, t } = useApp();
+  const worker = currentWorker;
 
-  const [name, setName] = useState(worker.name);
-  const [skill, setSkill] = useState(worker.skill);
-  const [experienceYears, setExperienceYears] = useState(worker.experienceYears);
-  const [bio, setBio] = useState(worker.bio);
-  const [workingHours, setWorkingHours] = useState(worker.workingHours);
+  if (!worker) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
+        <h3 className="text-lg font-bold text-slate-900">No Worker Profile Found</h3>
+        <p className="text-xs text-slate-500">Please register or log in with your worker credentials.</p>
+      </div>
+    );
+  }
+
+  const [name, setName] = useState(worker.name || '');
+  const [skill, setSkill] = useState(worker.skill || 'Plumbing');
+  const [experienceYears, setExperienceYears] = useState(worker.experienceYears || 3);
+  const [bio, setBio] = useState(worker.bio || '');
+  const [workingHours, setWorkingHours] = useState(worker.workingHours || '9:00 AM - 7:00 PM');
   const [isSaved, setIsSaved] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {

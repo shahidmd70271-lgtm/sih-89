@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Booking, AvailabilitySlot } from '../../types';
+import { OpenStreetMapView, LocationCoordinates } from '../maps/OpenStreetMapView';
 
 export const BookingModal: React.FC = () => {
   const {
@@ -25,6 +26,7 @@ export const BookingModal: React.FC = () => {
     isBookingModalOpen,
     setIsBookingModalOpen,
     createNewBooking,
+    bookings,
     setActiveView,
     t,
   } = useApp();
@@ -32,8 +34,10 @@ export const BookingModal: React.FC = () => {
   const [dateType, setDateType] = useState<'today' | 'tomorrow' | 'custom'>('today');
   const [customDate, setCustomDate] = useState('2026-08-31');
   const [selectedSlotId, setSelectedSlotId] = useState<string>('slot-1');
-  const [address, setAddress] = useState('Flat 402, Nilgiri Apartments, Sector 14, Main Road');
+  const [address, setAddress] = useState('');
+  const [coordinates, setCoordinates] = useState<LocationCoordinates | null>(null);
   const [problemDescription, setProblemDescription] = useState('');
+  const [addressError, setAddressError] = useState('');
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
 
   if (!isBookingModalOpen || !selectedWorker) return null;
@@ -48,44 +52,65 @@ export const BookingModal: React.FC = () => {
         { id: 'slot-5', startTime: '06:00 PM', endTime: '07:00 PM', label: '06:00 PM – 07:00 PM', isBooked: false, isAvailable: true },
       ];
 
-  // For "tomorrow", slots might have different booking states
+  const formattedDate =
+    dateType === 'today'
+      ? 'Today'
+      : dateType === 'tomorrow'
+      ? 'Tomorrow'
+      : customDate;
+
+  // Real slot booked status determined from actual database bookings for this worker & date
   const activeSlots = defaultSlots.map((slot) => {
-    if (dateType === 'tomorrow') {
-      return { ...slot, isBooked: slot.id === 'slot-2' };
-    }
-    if (dateType === 'custom') {
-      return { ...slot, isBooked: false };
-    }
-    return slot;
+    const isBookedInDb = bookings.some(
+      (b) =>
+        b.workerId === selectedWorker.id &&
+        (b.date === formattedDate || b.date.includes(formattedDate)) &&
+        (b.slotId === slot.id || b.timeSlot === slot.label) &&
+        b.status !== 'rejected' &&
+        b.status !== 'cancelled'
+    );
+    return {
+      ...slot,
+      isBooked: isBookedInDb || (slot.isBooked && !slot.isAvailable),
+    };
   });
 
   const selectedSlot = activeSlots.find((s) => s.id === selectedSlotId) || activeSlots.find((s) => !s.isBooked && s.isAvailable) || activeSlots[0];
-
-  const formattedDate =
-    dateType === 'today'
-      ? 'Today, 29 Aug 2026'
-      : dateType === 'tomorrow'
-      ? 'Tomorrow, 30 Aug 2026'
-      : customDate;
 
   const basePrice = selectedWorker.basePricePerHour;
   const platformFee = 15;
   const welfareCess = Math.round(basePrice * 0.05); // 5% cooperative welfare & accident fund
   const totalAmount = basePrice + platformFee + welfareCess;
 
-  const handleConfirm = (e: React.FormEvent) => {
+  const handleLocationSelected = (loc: LocationCoordinates) => {
+    setCoordinates(loc);
+    if (loc.address) {
+      setAddress(loc.address);
+      setAddressError('');
+    }
+  };
+
+  const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (selectedSlot.isBooked || !selectedSlot.isAvailable) {
       return;
     }
 
-    const created = createNewBooking({
+    if (!address.trim()) {
+      setAddressError('Please enter your service address or select a location on the map.');
+      return;
+    }
+
+    const created = await createNewBooking({
       workerId: selectedWorker.id,
       date: formattedDate,
       timeSlot: selectedSlot.label,
       slotId: selectedSlot.id,
-      customerAddress: address,
+      customerAddress: address.trim(),
+      latitude: coordinates?.lat,
+      longitude: coordinates?.lng,
+      customerCoordinates: coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : undefined,
       problemDescription: problemDescription || `General service for ${selectedWorker.skill}`,
       estimatedPrice: basePrice,
       platformFee,
@@ -440,21 +465,47 @@ export const BookingModal: React.FC = () => {
               </div>
             </div>
 
-            {/* STEP 3: ADDRESS & PROBLEM DESCRIPTION */}
+            {/* STEP 3: ADDRESS & GOOGLE MAP LOCATION PICKER */}
             <div className="space-y-4 pt-1">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                  3. Service Address
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                    3. Service Location & Address
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-normal">
+                    Drag pin or search to set exact location
+                  </span>
                 </label>
+
+                {/* OpenStreetMap Interactive Location Selector */}
+                <OpenStreetMapView
+                  selectedLocation={coordinates}
+                  onLocationSelect={handleLocationSelected}
+                  interactiveSelect={true}
+                  searchable={true}
+                  destinationLabel="Your Service Address"
+                  height="220px"
+                />
+
                 <input
                   type="text"
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (e.target.value.trim()) setAddressError('');
+                  }}
                   placeholder="House/Flat number, building, landmark, locality"
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-emerald-500 font-medium"
+                  className={`w-full text-xs bg-slate-50 border rounded-xl px-3.5 py-2.5 text-slate-900 font-medium ${
+                    addressError
+                      ? 'border-red-400 focus:outline-red-500 bg-red-50/40'
+                      : 'border-slate-200 focus:outline-emerald-500'
+                  }`}
                   required
                 />
+                {addressError && (
+                  <p className="text-[11px] text-red-600 font-medium">{addressError}</p>
+                )}
               </div>
 
               <div className="space-y-1.5">

@@ -15,7 +15,21 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const CustomerSidebar: React.FC = () => {
-  const { activeView, setActiveView, activeBooking, openEmergencySOS, t } = useApp();
+  const { currentUser, bookings, activeView, setActiveView, activeBooking, openEmergencySOS, t } = useApp();
+
+  const customerBookingsCount = currentUser?.id
+    ? bookings.filter((b) => !b.customer_id || b.customer_id === currentUser.id || b.customerName === currentUser.name).length
+    : bookings.length;
+
+  const initials = currentUser?.name
+    ? currentUser.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'CU';
 
   const navItems = [
     {
@@ -32,7 +46,7 @@ export const CustomerSidebar: React.FC = () => {
       id: 'my-bookings',
       label: t('navMyBookings'),
       icon: CalendarCheck,
-      badge: '2',
+      badge: customerBookingsCount > 0 ? String(customerBookingsCount) : undefined,
     },
     {
       id: 'emergency-sos',
@@ -44,7 +58,6 @@ export const CustomerSidebar: React.FC = () => {
       id: 'customer-messages',
       label: t('navMessages'),
       icon: MessageSquare,
-      badge: '1',
     },
     {
       id: 'customer-payments',
@@ -64,16 +77,20 @@ export const CustomerSidebar: React.FC = () => {
         {/* User Mini Profile */}
         <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-emerald-200 shrink-0">
-            RS
+            {initials}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-slate-800 truncate">Rahul Sharma</h4>
+              <h4 className="text-xs font-bold text-slate-800 truncate">
+                {currentUser?.name || 'Citizen Customer'}
+              </h4>
               <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold uppercase tracking-tight">
                 {t('verified')}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 truncate">Noida Sector 62</p>
+            <p className="text-[11px] text-slate-400 truncate">
+              {currentUser?.phone || currentUser?.email || 'Verified Account'}
+            </p>
           </div>
         </div>
 
@@ -88,7 +105,7 @@ export const CustomerSidebar: React.FC = () => {
             const isActive = activeView === item.id;
 
             if (item.isEmergency) {
-              return null; // Handled in bottom geometric alert card
+              return null; // Handled in bottom alert card
             }
 
             return (
@@ -98,56 +115,49 @@ export const CustomerSidebar: React.FC = () => {
                 className={`w-full flex items-center justify-between p-3 rounded-xl text-xs transition-colors cursor-pointer ${
                   isActive
                     ? 'bg-emerald-50 text-emerald-700 font-bold'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-medium'
+                    : 'text-slate-600 hover:bg-slate-50 font-medium'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-5 h-5 rounded-sm flex items-center justify-center ${
-                      isActive
-                        ? 'bg-emerald-600/20 text-emerald-700'
-                        : 'border border-slate-300 text-slate-400'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                  </div>
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
 
-                {item.id === 'live-tracking' ? (
-                  <span className="bg-orange-500 w-2 h-2 rounded-full ring-4 ring-orange-100"></span>
-                ) : item.badge ? (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      isActive
-                        ? 'bg-emerald-200 text-emerald-900'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
+                {item.badge && (
+                  <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                     {item.badge}
                   </span>
-                ) : null}
+                )}
               </button>
             );
           })}
         </nav>
       </div>
 
-      {/* Geometric Emergency SOS Box */}
-      <div className="pt-4 mt-auto">
-        <div className="bg-slate-800 rounded-2xl p-4 text-white relative overflow-hidden shadow-lg border border-slate-700/80">
-          <div className="relative z-10 space-y-1">
-            <p className="text-[11px] text-slate-400 italic">{t('emergencyPrompt')}</p>
-            <p className="font-bold text-sm text-white mb-2.5">{t('needHelpNow')}</p>
-            <button
-              onClick={() => openEmergencySOS()}
-              className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-3 rounded-lg transition-all w-full flex items-center justify-center gap-1.5 shadow-md shadow-red-500/20 cursor-pointer"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>{t('sosQuickBooking')}</span>
-            </button>
+      {/* Bottom Emergency SOS Card & Cooperative Badge */}
+      <div className="space-y-3 pt-4 border-t border-slate-100">
+        {/* Emergency SOS Button */}
+        <div
+          onClick={() => openEmergencySOS()}
+          className="bg-linear-to-br from-red-500 to-rose-700 p-4 rounded-2xl text-white shadow-md shadow-red-500/20 cursor-pointer hover:opacity-95 transition-opacity"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="w-4 h-4 text-amber-200 animate-bounce" />
+            <h5 className="font-extrabold text-xs uppercase tracking-wider">
+              {t('emergencyServiceSOS')}
+            </h5>
           </div>
-          <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white opacity-5 rounded-full pointer-events-none"></div>
+          <p className="text-[11px] text-red-100 leading-snug">
+            {t('emergencySosSubtitle')}
+          </p>
+        </div>
+
+        {/* Cooperative Attestation */}
+        <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center gap-2.5 text-xs text-emerald-900">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="text-[11px] font-semibold leading-tight">
+            {t('nlcfCooperativeFederationAttested')}
+          </span>
         </div>
       </div>
     </aside>

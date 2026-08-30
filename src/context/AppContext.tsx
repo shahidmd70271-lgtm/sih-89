@@ -9,15 +9,18 @@ import {
   ChatMessage,
   AvailabilitySlot,
   WorkerNotification,
+  AuthUser,
+  PaymentMode,
+  Payment,
 } from '../types';
-import {
-  INITIAL_WORKERS,
-  INITIAL_BOOKINGS,
-  INITIAL_WORKER_NOTIFICATIONS,
-} from '../data/mockData';
-import { translate, translations } from '../translations';
+import { translate } from '../translations';
+import { authService } from '../services/authService';
+import { sahaayakService } from '../services/sahaayakService';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 interface AppContextType {
+  // Auth state
+  currentUser: AuthUser | null;
   currentRole: UserRole;
   userRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
@@ -25,13 +28,41 @@ interface AppContextType {
   setActiveView: (view: string) => void;
   language: LanguageCode;
   setLanguage: (lang: LanguageCode) => void;
+
+  // Auth Modals & Actions
+  isCustomerAuthModalOpen: boolean;
+  setIsCustomerAuthModalOpen: (open: boolean) => void;
+  isAdminAuthModalOpen: boolean;
+  setIsAdminAuthModalOpen: (open: boolean) => void;
+  isWorkerAuthModalOpen: boolean;
+  setIsWorkerAuthModalOpen: (open: boolean) => void;
+  loginAsCustomer: (params: {
+    provider: 'google' | 'phone';
+    email?: string;
+    phone?: string;
+    name?: string;
+    otp?: string;
+  }) => Promise<AuthUser>;
+  loginAsWorker: (credentials: {
+    emailOrPhone: string;
+    password?: string;
+  }) => Promise<{
+    user: AuthUser;
+    worker?: Worker;
+    status: 'Pending' | 'Verified' | 'Rejected' | 'NotFound';
+  }>;
+  loginAsAdmin: (email: string, passcode: string) => Promise<AuthUser>;
+  logout: () => Promise<void>;
+
+  // Data & State
   workers: Worker[];
+  currentWorker: Worker | null;
   bookings: Booking[];
   activeBooking: Booking | null;
   selectedWorker: Worker | null;
   selectedServiceFilter: ServiceType | 'All';
   setSelectedServiceFilter: (service: ServiceType | 'All') => void;
-  
+
   // Worker online/offline state
   isWorkerOnline: boolean;
   setIsWorkerOnline: (online: boolean) => void;
@@ -64,19 +95,40 @@ interface AppContextType {
   // Actions
   openBookingForWorker: (worker: Worker, isEmergency?: boolean) => void;
   openWorkerProfile: (worker: Worker) => void;
-  createNewBooking: (newBookingData: Partial<Booking>) => Booking;
+  createNewBooking: (newBookingData: Partial<Booking>) => Promise<Booking>;
   updateBookingStatus: (bookingId: string, status: BookingStatus) => void;
-  acceptBookingByWorker: (bookingId: string, workerId?: string) => void;
-  rejectBookingByWorker: (bookingId: string, workerId?: string, reason?: string) => void;
+  acceptBookingByWorker: (bookingId: string, workerId?: string) => Promise<void>;
+  rejectBookingByWorker: (bookingId: string, workerId?: string, reason?: string) => Promise<void>;
+  verifyOtpAndStartService: (bookingId: string, enteredOtp: string) => Promise<{ success: boolean; message: string }>;
   verifyWorker: (workerId: string, status: 'Verified' | 'Rejected') => void;
-  approveWorkerVerification: (workerId: string) => void;
-  rejectWorkerVerification: (workerId: string) => void;
-  addNewWorker: (workerData: Partial<Worker>) => Worker;
+  approveWorkerVerification: (workerId: string) => Promise<void>;
+  rejectWorkerVerification: (workerId: string) => Promise<void>;
+  removeWorkerFromNetwork: (workerId: string, reason?: string) => Promise<void>;
+  addNewWorker: (workerData: Partial<Worker>) => Promise<Worker>;
   setActiveBookingById: (bookingId: string) => void;
   openEmergencySOS: (preselectedService?: ServiceType) => void;
   toggleWorkerSlot: (workerId: string, slotId: string) => void;
   setWorkerSlotAvailability: (workerId: string, slotId: string, isAvailable: boolean) => void;
-  
+
+  // Job & Payment Completion
+  recordPaymentAndCompleteJob: (
+    bookingId: string,
+    paymentMode: PaymentMode,
+    extraMaterialsCost?: number
+  ) => Promise<void>;
+  confirmPaymentReceived: (bookingId: string) => Promise<void>;
+
+  // Real Worker Earnings
+  getWorkerEarnings: (workerId?: string) => Promise<{
+    todayEarnings: number;
+    totalEarnings: number;
+    completedJobs: number;
+    pendingRequestsCount: number;
+    acceptedJobsCount: number;
+    paidJobsCount: number;
+    paymentsHistory: Payment[];
+  }>;
+
   // Messages state
   chatMessages: ChatMessage[];
   sendChatMessage: (text: string, sender?: 'customer' | 'worker') => void;
@@ -87,17 +139,155 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const parseRouteFromUrl = (): { view?: string; role?: UserRole } | null => {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+  const path = window.location.pathname.replace(/^\//, '').trim().toLowerCase();
+  const rawRoute = hash || path;
+
+  if (!rawRoute) return null;
+
+  // Admin routes
+  if (
+    rawRoute === 'admin' ||
+    rawRoute === 'admin-desk' ||
+    rawRoute === 'admin-verification' ||
+    rawRoute === 'admin/verification'
+  ) {
+    return { view: 'admin-verification', role: 'admin' };
+  }
+  if (rawRoute === 'admin-dashboard' || rawRoute === 'admin-overview' || rawRoute === 'admin/dashboard') {
+    return { view: 'admin-dashboard', role: 'admin' };
+  }
+  if (rawRoute === 'admin-cooperatives' || rawRoute === 'admin/cooperatives') {
+    return { view: 'admin-cooperatives', role: 'admin' };
+  }
+  if (rawRoute === 'admin-analytics' || rawRoute === 'admin/analytics') {
+    return { view: 'admin-analytics', role: 'admin' };
+  }
+  if (rawRoute === 'admin-ai-forecast' || rawRoute === 'admin/ai-forecast') {
+    return { view: 'admin-ai-forecast', role: 'admin' };
+  }
+
+  // Worker routes
+  if (rawRoute === 'worker' || rawRoute === 'worker-portal' || rawRoute === 'worker-dashboard' || rawRoute === 'worker/dashboard') {
+    return { view: 'worker-dashboard', role: 'worker' };
+  }
+  if (rawRoute === 'worker-jobs' || rawRoute === 'worker/jobs') {
+    return { view: 'worker-jobs', role: 'worker' };
+  }
+  if (rawRoute === 'worker-schedule' || rawRoute === 'worker/schedule') {
+    return { view: 'worker-schedule', role: 'worker' };
+  }
+  if (rawRoute === 'worker-earnings' || rawRoute === 'worker/earnings') {
+    return { view: 'worker-earnings', role: 'worker' };
+  }
+  if (rawRoute === 'worker-welfare' || rawRoute === 'worker/welfare') {
+    return { view: 'worker-welfare', role: 'worker' };
+  }
+  if (rawRoute === 'worker-profile' || rawRoute === 'worker/profile') {
+    return { view: 'worker-profile', role: 'worker' };
+  }
+
+  // Customer routes
+  if (rawRoute === 'find-services' || rawRoute === 'services' || rawRoute === 'catalog') {
+    return { view: 'find-services', role: 'customer' };
+  }
+  if (rawRoute === 'customer-bookings' || rawRoute === 'my-bookings' || rawRoute === 'bookings') {
+    return { view: 'customer-bookings', role: 'customer' };
+  }
+  if (rawRoute === 'customer' || rawRoute === 'customer-dashboard') {
+    return { view: 'customer-dashboard', role: 'customer' };
+  }
+  if (rawRoute === 'landing' || rawRoute === 'home') {
+    return { view: 'landing', role: 'customer' };
+  }
+
+  return {
+    view: rawRoute,
+    role: rawRoute.startsWith('admin-') ? 'admin' : rawRoute.startsWith('worker-') ? 'worker' : 'customer',
+  };
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentRole, setCurrentRole] = useState<UserRole>('customer');
-  const [activeView, setActiveView] = useState<string>('landing');
+  // Session & Role
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    return authService.getCurrentUser();
+  });
+
+  const [currentRole, setCurrentRoleState] = useState<UserRole>(() => {
+    const urlRoute = parseRouteFromUrl();
+    if (urlRoute?.role) return urlRoute.role;
+    const saved = authService.getCurrentUser();
+    return saved ? saved.role : 'customer';
+  });
+
+  const [activeView, setActiveViewState] = useState<string>(() => {
+    const urlRoute = parseRouteFromUrl();
+    if (urlRoute?.view) return urlRoute.view;
+    const saved = authService.getCurrentUser();
+    if (saved?.role === 'admin') return 'admin-verification';
+    if (saved?.role === 'worker') return 'worker-dashboard';
+    if (saved?.role === 'customer') return 'customer-dashboard';
+    return 'landing';
+  });
+
+  const setActiveView = (view: string) => {
+    setActiveViewState(view);
+    if (view.startsWith('admin-')) {
+      setCurrentRoleState('admin');
+    } else if (view.startsWith('worker-')) {
+      setCurrentRoleState('worker');
+    } else if (
+      view === 'find-services' ||
+      view === 'customer-dashboard' ||
+      view === 'customer-bookings' ||
+      view === 'my-bookings'
+    ) {
+      setCurrentRoleState('customer');
+    }
+    try {
+      if (typeof window !== 'undefined') {
+        const targetHash = view === 'landing' ? '' : `#${view}`;
+        window.history.replaceState(null, '', window.location.pathname + targetHash);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const setCurrentRole = (role: UserRole) => {
+    setCurrentRoleState(role);
+  };
+
+  // Synchronize browser history / URL hash changes
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const urlRoute = parseRouteFromUrl();
+      if (urlRoute?.view) {
+        setActiveViewState(urlRoute.view);
+        if (urlRoute.role) {
+          setCurrentRoleState(urlRoute.role);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
+
   const [language, setLanguageState] = useState<LanguageCode>(() => {
     try {
       const saved = localStorage.getItem('sahaayak_language');
       if (saved === 'en' || saved === 'hi' || saved === 'te') {
         return saved;
       }
-    } catch (e) {
-      // localStorage may be restricted in sandbox
+    } catch {
+      // ignore
     }
     return 'en';
   });
@@ -106,22 +296,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLanguageState(lang);
     try {
       localStorage.setItem('sahaayak_language', lang);
-    } catch (e) {
+    } catch {
       // ignore
     }
   };
 
-  const [workers, setWorkers] = useState<Worker[]>(INITIAL_WORKERS);
-  const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
-  const [activeBookingId, setActiveBookingId] = useState<string | null>('SHK-2026-8801');
-  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(INITIAL_WORKERS[0]);
+  // Auth Modals
+  const [isCustomerAuthModalOpen, setIsCustomerAuthModalOpen] = useState(false);
+  const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState(false);
+  const [isWorkerAuthModalOpen, setIsWorkerAuthModalOpen] = useState(false);
+
+  // Real database state (initial empty state, filled by real user actions)
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
+  const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [selectedServiceFilter, setSelectedServiceFilter] = useState<ServiceType | 'All'>('All');
+
+  // Load database records on mount & subscribe to Supabase Realtime updates
+  useEffect(() => {
+    const loadRealData = async () => {
+      const dbWorkers = await sahaayakService.getWorkers();
+      const dbBookings = await sahaayakService.getBookings();
+      setWorkers(dbWorkers);
+      setBookings(dbBookings);
+      if (dbBookings.length > 0) {
+        setActiveBookingId(dbBookings[0].id);
+      }
+    };
+    loadRealData();
+
+    // Supabase Realtime updates
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const bookingsChannel = supabase
+          .channel('sahaayak-realtime-bookings')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async () => {
+            const updated = await sahaayakService.getBookings();
+            setBookings(updated);
+          })
+          .subscribe();
+
+        const workersChannel = supabase
+          .channel('sahaayak-realtime-workers')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'workers' }, async () => {
+            const updatedWorkers = await sahaayakService.getWorkers();
+            setWorkers(updatedWorkers);
+          })
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(bookingsChannel);
+          supabase.removeChannel(workersChannel);
+        };
+      } catch (err) {
+        console.warn('Realtime subscription error:', err);
+      }
+    }
+  }, []);
 
   // Worker Online Status
   const [isWorkerOnline, setIsWorkerOnline] = useState<boolean>(true);
 
   // Worker Notifications
-  const [workerNotifications, setWorkerNotifications] = useState<WorkerNotification[]>(INITIAL_WORKER_NOTIFICATIONS);
+  const [workerNotifications, setWorkerNotifications] = useState<WorkerNotification[]>([]);
   const [isWorkerNotifPanelOpen, setIsWorkerNotifPanelOpen] = useState(false);
 
   // Modals
@@ -133,32 +371,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isWorkerJoinModalOpen, setIsWorkerJoinModalOpen] = useState(false);
 
   // Chat messages
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: 'msg-1',
-      sender: 'system',
-      text: 'Booking request registered. Waiting for worker response.',
-      timestamp: '12 mins ago',
-    },
-    {
-      id: 'msg-2',
-      sender: 'worker',
-      text: 'Namaste Rahul ji! I have accepted your request. Carrying heavy pipe sealing sealant and toolkit.',
-      timestamp: '6 mins ago',
-    },
-    {
-      id: 'msg-3',
-      sender: 'customer',
-      text: 'Thanks Ravi, please take elevator to 4th floor Flat 402. The leak is under the main kitchen sink.',
-      timestamp: '4 mins ago',
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
-  const activeBooking = bookings.find((b) => b.id === activeBookingId) || bookings[0] || null;
+  // Current logged in worker resolution: strictly resolve to authenticated worker
+  const currentWorker =
+    (currentUser?.role === 'worker' && currentUser?.workerId
+      ? workers.find((w) => w.id === currentUser.workerId)
+      : null) ||
+    (currentUser?.role === 'worker'
+      ? workers.find(
+          (w) =>
+            w.profile_id === currentUser?.id ||
+            (w.email && currentUser?.email && w.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+            (w.phone && currentUser?.phone && w.phone === currentUser.phone)
+        )
+      : null) ||
+    null;
+
+  const activeBooking = activeBookingId ? bookings.find((b) => b.id === activeBookingId) || null : null;
   const unreadNotificationsCount = workerNotifications.filter((n) => !n.isRead).length;
 
   const t = (key: string, params?: Record<string, string | number>): string => {
     return translate(language, key, params);
+  };
+
+  // Auth Operations
+  const loginAsCustomer = async (params: {
+    provider: 'google' | 'phone';
+    email?: string;
+    phone?: string;
+    name?: string;
+    otp?: string;
+  }): Promise<AuthUser> => {
+    let user: AuthUser;
+    if (params.provider === 'google') {
+      user = await authService.signInWithGoogle(params.email, params.name);
+    } else {
+      user = await authService.signInWithPhone(params.phone || '', params.otp || '5842', params.name);
+    }
+    setCurrentUser(user);
+    setCurrentRole('customer');
+    setActiveView('customer-dashboard');
+    return user;
+  };
+
+  const loginAsWorker = async (
+    credentials: { emailOrPhone: string; password?: string }
+  ): Promise<{
+    user: AuthUser;
+    worker?: Worker;
+    status: 'Pending' | 'Verified' | 'Rejected' | 'NotFound';
+  }> => {
+    const result = await authService.workerSignIn(credentials, workers);
+    if (result.status === 'Verified') {
+      setCurrentUser(result.user);
+      setCurrentRole('worker');
+      setActiveView('worker-dashboard');
+    }
+    return result;
+  };
+
+  const loginAsAdmin = async (email: string, passcode: string): Promise<AuthUser> => {
+    const adminUser = await authService.adminSignIn(email, passcode);
+    setCurrentUser(adminUser);
+    setCurrentRole('admin');
+    setActiveView('admin-verification');
+    return adminUser;
+  };
+
+  const logout = async (): Promise<void> => {
+    await authService.signOut();
+    setCurrentUser(null);
+    setCurrentRole('customer');
+    setActiveView('landing');
   };
 
   const addWorkerNotification = (n: Omit<WorkerNotification, 'id' | 'timestamp' | 'isRead'>) => {
@@ -212,7 +497,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setActiveBookingById = (bookingId: string) => {
     setActiveBookingId(bookingId);
-    setActiveView('my-bookings');
+    if (currentRole === 'worker') {
+      setActiveView('worker-live-job');
+    } else {
+      setActiveView('my-bookings');
+    }
   };
 
   const toggleWorkerSlot = (workerId: string, slotId: string) => {
@@ -239,242 +528,137 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const createNewBooking = (newBookingData: Partial<Booking>): Booking => {
-    const randomId = `SHK-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const randomOtp = `${Math.floor(1000 + Math.random() * 9000)}`;
-    
-    const worker = workers.find((w) => w.id === newBookingData.workerId) || selectedWorker || workers[0];
-    const estimatedPrice = newBookingData.estimatedPrice || worker.basePricePerHour || 299;
-    const platformFee = 15;
-    const welfareCess = Math.round(estimatedPrice * 0.05);
-    const totalAmount = estimatedPrice + platformFee + welfareCess;
+  const createNewBooking = async (newBookingData: Partial<Booking>): Promise<Booking> => {
+    const worker = workers.find((w) => w.id === newBookingData.workerId) || selectedWorker;
+    if (!worker) {
+      throw new Error('Please select a valid worker to book.');
+    }
 
-    // A customer booking ALWAYS starts in 'Pending' (Waiting for Worker response)
-    const newBooking: Booking = {
-      id: randomId,
-      customerName: newBookingData.customerName || 'Rahul Sharma',
-      customerPhone: newBookingData.customerPhone || '+91 98765 00001',
-      customerAddress: newBookingData.customerAddress || 'Flat 402, Nilgiri Apartments, Sector 14',
-      customerCoordinates: { lat: 28.5355, lng: 77.241 },
+    const isWorkerAvailable =
+      worker.isVerified &&
+      (worker.verificationStatus === 'Verified' || worker.verificationStatus === 'approved') &&
+      worker.verificationStatus !== 'Removed' &&
+      worker.verificationStatus !== 'Inactive' &&
+      (worker as any).status !== 'removed' &&
+      (worker as any).status !== 'inactive';
+
+    if (!isWorkerAvailable) {
+      throw new Error('This worker is currently not available for bookings.');
+    }
+
+    const createdBooking = await sahaayakService.createBooking({
+      ...newBookingData,
+      customer_id: currentUser?.id || 'customer',
+      customerName: currentUser?.name || newBookingData.customerName || 'Customer',
+      customerPhone: currentUser?.phone || newBookingData.customerPhone || '',
       workerId: worker.id,
       workerName: worker.name,
       workerSkill: worker.skill,
       workerAvatar: worker.avatar,
       workerPhone: worker.phone,
-      workerLocation: { lat: 28.5422, lng: 77.234 },
       serviceType: worker.skill,
-      date: newBookingData.date || 'Today, 29 Aug 2026',
-      timeSlot: newBookingData.timeSlot || (newBookingData.isEmergency ? 'Immediate Dispatch (within 30 mins)' : '10:00 AM – 11:00 AM'),
-      slotId: newBookingData.slotId,
-      problemDescription: newBookingData.problemDescription || 'General household service repair required.',
-      estimatedPrice,
-      platformFee,
-      welfareCess,
-      totalAmount,
-      status: 'Pending', // Strictly pending! Worker must manually decide
-      isEmergency: !!newBookingData.isEmergency,
-      distanceKm: newBookingData.distanceKm || worker.distanceKm || 1.2,
-      etaMinutes: newBookingData.isEmergency ? 15 : 0,
-      createdAt: 'Just now',
-      otpCode: randomOtp,
-      paymentStatus: 'Pending',
-    };
+    });
 
-    // Mark worker's slot as isPending (Booking Requested), NOT permanently booked yet
-    if (newBookingData.slotId || newBookingData.timeSlot) {
-      setWorkers((prev) =>
-        prev.map((w) => {
-          if (w.id !== worker.id) return w;
-          const updatedSlots = (w.availabilitySlots || []).map((s) => {
-            if (s.id === newBookingData.slotId || s.label === newBookingData.timeSlot) {
-              return {
-                ...s,
-                isPending: true,
-                bookedBy: newBooking.customerName,
-                bookingId: newBooking.id,
-              };
-            }
-            return s;
-          });
-          return { ...w, availabilitySlots: updatedSlots };
-        })
-      );
-    }
+    setBookings((prev) => [createdBooking, ...prev]);
+    setActiveBookingId(createdBooking.id);
 
-    setBookings((prev) => [newBooking, ...prev]);
-    setActiveBookingId(newBooking.id);
+    addWorkerNotification({
+      workerId: worker.id,
+      type: createdBooking.isEmergency ? 'emergency_request' : 'service_request',
+      title: createdBooking.isEmergency ? 'New Emergency Request' : 'New Service Request',
+      message: `${createdBooking.customerName} requested ${createdBooking.serviceType} Service (${createdBooking.timeSlot}).`,
+      bookingId: createdBooking.id,
+      isEmergency: createdBooking.isEmergency,
+    });
 
-    // Push notification to worker only if worker is online (or if emergency, notify relevant workers)
-    if (newBooking.isEmergency) {
-      addWorkerNotification({
-        workerId: worker.id,
-        type: 'emergency_request',
-        title: 'New Emergency Request',
-        message: `🚨 Emergency ${newBooking.serviceType} request — ${newBooking.distanceKm} km away.`,
-        bookingId: newBooking.id,
-        isEmergency: true,
-      });
-    } else {
-      addWorkerNotification({
-        workerId: worker.id,
-        type: 'service_request',
-        title: 'New Service Request',
-        message: `${newBooking.customerName} requested ${newBooking.serviceType} Service (${newBooking.timeSlot}).`,
-        bookingId: newBooking.id,
-      });
-    }
-
-    // Add initial chat system message
     setChatMessages((prev) => [
       ...prev,
       {
         id: `msg-${Date.now()}`,
         sender: 'system',
-        text: `New service request #${newBooking.id} submitted for ${worker.name}. Waiting for worker acceptance. OTP for service verification is ${randomOtp}.`,
+        text: `New service request #${createdBooking.id} created for ${worker.name}. Service OTP generated.`,
         timestamp: 'Just now',
       },
     ]);
 
-    return newBooking;
+    return createdBooking;
   };
 
   const updateBookingStatus = (bookingId: string, status: BookingStatus) => {
+    sahaayakService.updateBookingStatus(bookingId, status);
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
     );
   };
 
-  const acceptBookingByWorker = (bookingId: string, workerId?: string) => {
+  const acceptBookingByWorker = async (bookingId: string, workerId?: string) => {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
 
-    const assignedWorker = workers.find((w) => w.id === (workerId || booking.workerId)) || workers[0];
+    const assignedWorkerId = workerId || booking.workerId;
+    const updated = await sahaayakService.acceptBooking(bookingId, assignedWorkerId);
 
-    // Update booking status to Worker Accepted
     setBookings((prev) =>
-      prev.map((b) => {
-        if (b.id === bookingId) {
-          return {
-            ...b,
-            workerId: assignedWorker.id,
-            workerName: assignedWorker.name,
-            workerSkill: assignedWorker.skill,
-            workerAvatar: assignedWorker.avatar,
-            workerPhone: assignedWorker.phone,
-            status: 'Worker Accepted',
-            paymentStatus: 'Paid (Escrow)',
-            acceptedAt: 'Just now',
-          };
-        }
-        return b;
-      })
+      prev.map((b) => (b.id === bookingId ? { ...b, ...updated, status: 'accepted' } : b))
     );
+    setActiveBookingId(bookingId);
 
-    // Lock the worker's slot permanently as booked
-    setWorkers((prev) =>
-      prev.map((w) => {
-        if (w.id !== assignedWorker.id) return w;
-        const updatedSlots = (w.availabilitySlots || []).map((s) => {
-          if (s.id === booking.slotId || s.label === booking.timeSlot) {
-            return {
-              ...s,
-              isBooked: true,
-              isPending: false,
-              bookedBy: booking.customerName,
-              bookingId: booking.id,
-            };
-          }
-          return s;
-        });
-        return { ...w, availabilitySlots: updatedSlots };
-      })
-    );
-
-    // Add worker notification
     addWorkerNotification({
-      workerId: assignedWorker.id,
+      workerId: assignedWorkerId,
       type: 'status_update',
       title: 'Booking Accepted',
       message: `Booking #${booking.id} accepted successfully for ${booking.customerName}.`,
       bookingId: booking.id,
     });
 
-    // Add system chat message
     setChatMessages((prev) => [
       ...prev,
       {
         id: `msg-${Date.now()}`,
         sender: 'system',
-        text: `Worker ${assignedWorker.name} accepted your booking #${booking.id} for ${booking.timeSlot}.`,
+        text: `Worker ${booking.workerName} accepted booking #${booking.id}. OTP for service verification is available in your bookings tab.`,
         timestamp: 'Just now',
       },
     ]);
   };
 
-  const rejectBookingByWorker = (bookingId: string, workerId?: string, reason?: string) => {
+  const rejectBookingByWorker = async (bookingId: string, workerId?: string, reason?: string) => {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
 
-    const assignedWorker = workers.find((w) => w.id === (workerId || booking.workerId)) || workers[0];
+    const assignedWorkerId = workerId || booking.workerId;
+    await sahaayakService.rejectBooking(bookingId, assignedWorkerId, reason);
 
-    // Update booking status to Worker Rejected
     setBookings((prev) =>
-      prev.map((b) => {
-        if (b.id === bookingId) {
-          return {
-            ...b,
-            status: 'Worker Rejected',
-            rejectionReason: reason || 'Worker unavailable at requested time',
-            rejectedAt: 'Just now',
-          };
-        }
-        return b;
-      })
+      prev.map((b) =>
+        b.id === bookingId
+          ? {
+              ...b,
+              status: 'rejected',
+              rejectionReason: reason || 'Worker unavailable',
+              rejectedAt: 'Just now',
+            }
+          : b
+      )
     );
+  };
 
-    // Free the slot back to Available Again
-    setWorkers((prev) =>
-      prev.map((w) => {
-        if (w.id !== assignedWorker.id) return w;
-        const updatedSlots = (w.availabilitySlots || []).map((s) => {
-          if (s.id === booking.slotId || s.label === booking.timeSlot) {
-            return {
-              ...s,
-              isBooked: false,
-              isPending: false,
-              isAvailable: true,
-              bookedBy: undefined,
-              bookingId: undefined,
-            };
-          }
-          return s;
-        });
-        return { ...w, availabilitySlots: updatedSlots };
-      })
-    );
-
-    // Add worker notification
-    addWorkerNotification({
-      workerId: assignedWorker.id,
-      type: 'status_update',
-      title: 'Booking Rejected',
-      message: `Booking #${booking.id} rejected.`,
-      bookingId: booking.id,
-    });
-
-    // Add system chat message
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: `msg-${Date.now()}`,
-        sender: 'system',
-        text: `Your selected worker was unavailable for booking #${booking.id} (${reason || 'Unavailable'}). Please select another available worker.`,
-        timestamp: 'Just now',
-      },
-    ]);
+  const verifyOtpAndStartService = async (bookingId: string, enteredOtp: string) => {
+    const result = await sahaayakService.verifyOtpAndStartService(bookingId, enteredOtp);
+    if (result.success) {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, status: 'in_progress', otp_verified: true } : b))
+      );
+    }
+    return result;
   };
 
   const verifyWorker = (workerId: string, status: 'Verified' | 'Rejected') => {
+    if (status === 'Verified') {
+      sahaayakService.approveWorkerApplication(workerId);
+    } else {
+      sahaayakService.rejectWorkerApplication(workerId);
+    }
     setWorkers((prev) =>
       prev.map((w) =>
         w.id === workerId
@@ -489,85 +673,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const approveWorkerVerification = (workerId: string) => {
-    verifyWorker(workerId, 'Verified');
+  const approveWorkerVerification = async (workerId: string) => {
+    const updated = await sahaayakService.approveWorkerApplication(workerId);
+    setWorkers((prev) =>
+      prev.map((w) => (w.id === workerId ? { ...w, ...updated } : w))
+    );
   };
 
-  const rejectWorkerVerification = (workerId: string) => {
-    setWorkers((prev) => prev.filter((w) => w.id !== workerId));
-    setSelectedWorker((prev) => (prev?.id === workerId ? null : prev));
+  const rejectWorkerVerification = async (workerId: string) => {
+    await sahaayakService.rejectWorkerApplication(workerId);
+    setWorkers((prev) =>
+      prev.map((w) => (w.id === workerId ? { ...w, verificationStatus: 'Rejected', isVerified: false, status: 'rejected' } : w))
+    );
   };
 
-  const addNewWorker = (workerData: Partial<Worker>): Worker => {
-    const appId = `SHK-WKR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const defaultSlots: AvailabilitySlot[] = [
-      { id: 's1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
-      { id: 's2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
-      { id: 's3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
-      { id: 's4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
-      { id: 's5', startTime: '06:00 PM', endTime: '07:00 PM', label: '06:00 PM – 07:00 PM', isBooked: false, isAvailable: true },
-    ];
+  const removeWorkerFromNetwork = async (workerId: string, reason?: string) => {
+    if (currentUser?.role !== 'admin') {
+      throw new Error('Unauthorized: Only administrators can remove workers from the cooperative network.');
+    }
+    const updated = await sahaayakService.removeWorker(workerId, currentUser.id, reason);
+    setWorkers((prev) =>
+      prev.map((w) => (w.id === workerId ? { ...w, ...updated } : w))
+    );
+  };
 
-    const newWorker: Worker = {
-      id: `worker-${Date.now()}`,
-      applicationId: appId,
-      appliedDate: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-      name: workerData.name || 'New Registered Shramik',
-      avatar:
-        workerData.avatar ||
-        'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400&auto=format&fit=crop&q=80',
-      skill: workerData.skill || 'Plumbing',
-      secondarySkills: workerData.secondarySkills || [],
-      rating: 5.0,
-      reviewsCount: 0,
-      experienceYears: workerData.experienceYears || 3,
-      distanceKm: workerData.distanceKm || 1.8,
-      basePricePerHour: workerData.basePricePerHour || 250,
-      availability: 'Available Today',
-      isVerified: false,
-      cooperativeId: workerData.cooperativeId || 'coop-1',
-      cooperativeName: workerData.cooperativeName || 'Delhi Shramik Seva Sahakari Samiti',
-      completedJobs: 0,
-      workingHours: workerData.workingHours || '9:00 AM - 7:00 PM',
-      location: workerData.location || 'Sector 14, Gurugram',
-      phone: workerData.phone || '+91 98123 45678',
-      bio: workerData.bio || 'Registered member of Labour Cooperative Society with verified trade expertise.',
-      languages: workerData.languages && workerData.languages.length > 0 ? workerData.languages : ['Hindi', 'English'],
-      certifications:
-        workerData.certifications && workerData.certifications.length > 0
-          ? workerData.certifications
-          : [
-              {
-                id: `cert-${Date.now()}`,
-                title: `${workerData.skill || 'Trade'} Certification`,
-                issuingBody: workerData.cooperativeName || 'Labour Cooperative Society',
-                year: 2026,
-                certificateNumber: `COOP-REG-${Math.floor(1000 + Math.random() * 9000)}`,
-                verified: false,
-              },
-            ],
-      verificationStatus: 'Pending',
-      verificationDocType: workerData.verificationDocType || 'Cooperative Attested Dossier',
-      safetyRating: 4.9,
-      insuranceCovered: true,
-      emergencyAvailable: true,
-      availabilitySlots: defaultSlots,
-      reviews: [],
-      dob: workerData.dob,
-      gender: workerData.gender,
-      email: workerData.email,
-      address: workerData.address,
-      maskedAadhaar: workerData.maskedAadhaar,
-      membershipId: workerData.membershipId,
-      documents: workerData.documents,
-      workSamples: workerData.workSamples,
-      workDescription: workerData.workDescription,
-      emergencyContact: workerData.emergencyContact,
-      insuranceDetails: workerData.insuranceDetails,
-    };
+  const addNewWorker = async (workerData: Partial<Worker>): Promise<Worker> => {
+    const createdWorker = await sahaayakService.createWorkerApplication(workerData);
+    setWorkers((prev) => [createdWorker, ...prev]);
+    return createdWorker;
+  };
 
-    setWorkers((prev) => [newWorker, ...prev]);
-    return newWorker;
+  // Job and Payment Handling
+  const recordPaymentAndCompleteJob = async (
+    bookingId: string,
+    paymentMode: PaymentMode,
+    extraMaterialsCost = 0
+  ) => {
+    const { booking } = await sahaayakService.completeJobAndRecordPayment(
+      bookingId,
+      paymentMode,
+      extraMaterialsCost
+    );
+
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, ...booking } : b))
+    );
+
+    // Refresh workers to update completed jobs count
+    const updatedWorkers = await sahaayakService.getWorkers();
+    setWorkers(updatedWorkers);
+  };
+
+  const confirmPaymentReceived = async (bookingId: string) => {
+    const updatedBooking = await sahaayakService.confirmPaymentReceived(bookingId);
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, ...updatedBooking } : b))
+    );
+
+    const updatedWorkers = await sahaayakService.getWorkers();
+    setWorkers(updatedWorkers);
+  };
+
+  const getWorkerEarnings = async (workerId?: string) => {
+    const targetId = workerId || currentWorker?.id || '';
+    return sahaayakService.getWorkerEarnings(targetId);
   };
 
   const sendChatMessage = (text: string, sender: 'customer' | 'worker' = 'customer') => {
@@ -579,7 +748,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setChatMessages((prev) => [...prev, newMsg]);
 
-    // Simulated worker reply after 1.5s if customer typed
     if (sender === 'customer') {
       setTimeout(() => {
         setChatMessages((prev) => [
@@ -587,7 +755,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           {
             id: `msg-${Date.now() + 1}`,
             sender: 'worker',
-            text: 'Got it! I am just reaching the turning near your building now.',
+            text: 'Message received. I am on schedule.',
             timestamp: 'Just now',
           },
         ]);
@@ -598,6 +766,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        currentUser,
         currentRole,
         userRole: currentRole,
         setCurrentRole,
@@ -605,7 +774,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveView,
         language,
         setLanguage,
+        isCustomerAuthModalOpen,
+        setIsCustomerAuthModalOpen,
+        isAdminAuthModalOpen,
+        setIsAdminAuthModalOpen,
+        isWorkerAuthModalOpen,
+        setIsWorkerAuthModalOpen,
+        loginAsCustomer,
+        loginAsWorker,
+        loginAsAdmin,
+        logout,
         workers,
+        currentWorker,
         bookings,
         activeBooking,
         selectedWorker,
@@ -640,14 +820,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateBookingStatus,
         acceptBookingByWorker,
         rejectBookingByWorker,
+        verifyOtpAndStartService,
         verifyWorker,
         approveWorkerVerification,
         rejectWorkerVerification,
+        removeWorkerFromNetwork,
         addNewWorker,
         setActiveBookingById,
         openEmergencySOS,
         toggleWorkerSlot,
         setWorkerSlotAvailability,
+        recordPaymentAndCompleteJob,
+        confirmPaymentReceived,
+        getWorkerEarnings,
         chatMessages,
         sendChatMessage,
         t,
@@ -665,4 +850,3 @@ export const useApp = () => {
   }
   return context;
 };
-

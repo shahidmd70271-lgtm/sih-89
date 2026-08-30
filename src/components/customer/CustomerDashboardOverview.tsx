@@ -18,7 +18,7 @@ import { useApp } from '../../context/AppContext';
 import { SERVICE_CATEGORIES } from '../../data/mockData';
 import { ServiceIcon } from '../common/ServiceIcon';
 import { WorkerCard } from './WorkerCard';
-import { ServiceType } from '../../types';
+import { Worker, ServiceType } from '../../types';
 
 export const CustomerDashboardOverview: React.FC = () => {
   const {
@@ -30,11 +30,28 @@ export const CustomerDashboardOverview: React.FC = () => {
     t,
   } = useApp();
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const isAvailableVerifiedWorker = (w: Worker) => {
+    const isApproved =
+      w.isVerified &&
+      (w.verificationStatus === 'Verified' || w.verificationStatus === 'approved');
+
+    const isNotRemoved =
+      w.verificationStatus !== 'Removed' &&
+      w.verificationStatus !== 'Inactive' &&
+      w.verificationStatus !== 'removed' &&
+      w.verificationStatus !== 'inactive' &&
+      w.verificationStatus !== 'Rejected' &&
+      w.verificationStatus !== 'rejected' &&
+      (w as any).status !== 'removed' &&
+      (w as any).status !== 'inactive';
+
+    return isApproved && isNotRemoved;
+  };
+
+  const approvedWorkers = workers.filter(isAvailableVerifiedWorker);
 
   // Filter nearby available verified workers
-  const nearbyWorkers = workers
-    .filter((w) => w.isVerified)
+  const nearbyWorkers = approvedWorkers
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 4);
 
@@ -61,6 +78,8 @@ export const CustomerDashboardOverview: React.FC = () => {
           const theme = getCategoryTheme(idx);
           const serviceKey = `service_${cat.id.replace(/[\s&]+/g, '')}`;
           const catTitle = t(serviceKey);
+          const verifiedCountForCat = approvedWorkers.filter((w) => w.skill === cat.id || w.secondarySkills?.includes(cat.id)).length;
+
           return (
             <div
               key={cat.id}
@@ -75,7 +94,9 @@ export const CustomerDashboardOverview: React.FC = () => {
                   {catTitle}
                 </p>
                 <p className="text-xs text-slate-400 font-medium truncate">
-                  {t('activeWorkersAvailable', { count: cat.activeWorkers })}
+                  {verifiedCountForCat > 0
+                    ? `${verifiedCountForCat} ${t('activeWorkersAvailable')}`
+                    : t('verifiedTrades')}
                 </p>
               </div>
             </div>
@@ -103,15 +124,25 @@ export const CustomerDashboardOverview: React.FC = () => {
               }}
               className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
             >
-              <span>{t('viewAllCount', { count: workers.length })}</span>
+              <span>{t('viewAllCount', { count: approvedWorkers.length })}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="space-y-3">
-            {nearbyWorkers.map((worker) => (
-              <WorkerCard key={worker.id} worker={worker} layout="list" />
-            ))}
+            {nearbyWorkers.length > 0 ? (
+              nearbyWorkers.map((worker) => (
+                <WorkerCard key={worker.id} worker={worker} layout="list" />
+              ))
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2">
+                <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
+                <h4 className="text-sm font-bold text-slate-800">{t('noWorkersFound')}</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {t('noWorkersFoundSub')}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Quick CTA to see full catalog */}

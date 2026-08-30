@@ -235,7 +235,7 @@ export const Footer: React.FC = () => {
                 <button
                   onClick={() => {
                     setCurrentRole('admin');
-                    setActiveView('admin-ai-assistant');
+                    setActiveView('admin-ai-forecast');
                   }}
                   className="hover:text-emerald-400 transition-colors cursor-pointer"
                 >
