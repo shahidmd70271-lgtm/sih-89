@@ -12,24 +12,32 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { COOPERATIVE_SOCIETIES } from '../../data/mockData';
+import { AdminAffiliateCooperativeModal } from './AdminAffiliateCooperativeModal';
 
 export const AdminCooperativeSocieties: React.FC = () => {
-  const { t } = useApp();
+  const { cooperatives, t } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAffiliateModalOpen, setIsAffiliateModalOpen] = useState(false);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  const filteredCooperatives = COOPERATIVE_SOCIETIES.filter((c) => {
+  const filteredCooperatives = (cooperatives || []).filter((c) => {
     const q = searchTerm.toLowerCase();
     return (
       c.name.toLowerCase().includes(q) ||
-      c.location.toLowerCase().includes(q) ||
-      c.state.toLowerCase().includes(q) ||
-      c.registrationNumber.toLowerCase().includes(q)
+      (c.location && c.location.toLowerCase().includes(q)) ||
+      (c.state && c.state.toLowerCase().includes(q)) ||
+      (c.registrationNumber && c.registrationNumber.toLowerCase().includes(q)) ||
+      (c.code && c.code.toLowerCase().includes(q))
     );
   });
 
+  const handleAffiliateSuccess = (coopName: string) => {
+    setSuccessNotice(`Successfully affiliated ${coopName} to the Sahaayak cooperative federation.`);
+    setTimeout(() => setSuccessNotice(null), 4000);
+  };
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-8 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -46,11 +54,23 @@ export const AdminCooperativeSocieties: React.FC = () => {
           </p>
         </div>
 
-        <button className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors self-start sm:self-auto cursor-pointer">
+        <button
+          id="btn-affiliate-new-coop"
+          onClick={() => setIsAffiliateModalOpen(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all self-start sm:self-auto cursor-pointer"
+        >
           <Plus className="w-4 h-4" />
           <span>{t('affiliateNewCoop')}</span>
         </button>
       </div>
+
+      {/* Success Notice Banner */}
+      {successNotice && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 flex items-center gap-2.5 text-xs text-emerald-950 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{successNotice}</span>
+        </div>
+      )}
 
       {/* Search Input */}
       <div className="relative max-w-md">
@@ -59,7 +79,7 @@ export const AdminCooperativeSocieties: React.FC = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder={t('searchCoopPlaceholder')}
-          className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2.5 pl-9 text-slate-900 focus:outline-emerald-500 font-medium"
+          className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2.5 pl-9 text-slate-900 focus:outline-emerald-500 font-medium shadow-xs"
         />
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
       </div>
@@ -80,13 +100,13 @@ export const AdminCooperativeSocieties: React.FC = () => {
                   <h3 className="text-base font-bold text-slate-900">{coop.name}</h3>
                   <p className="text-xs text-slate-500 flex items-center gap-1">
                     <MapPin className="w-3 h-3 text-slate-400" />
-                    <span>{coop.location}, {coop.state}</span>
+                    <span>{coop.location || coop.district}, {coop.state}</span>
                   </p>
                 </div>
               </div>
 
               <span className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                ⭐ {coop.rating}
+                ⭐ {coop.rating || 5.0}
               </span>
             </div>
 
@@ -102,7 +122,7 @@ export const AdminCooperativeSocieties: React.FC = () => {
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>{t('helplineOffice')}:</span>
-                <span className="font-medium text-slate-900">{coop.contactPhone}</span>
+                <span className="font-medium text-slate-900">{coop.contactPhone || coop.contactNumber}</span>
               </div>
             </div>
 
@@ -113,7 +133,7 @@ export const AdminCooperativeSocieties: React.FC = () => {
                   {t('enrolledShramiks')}
                 </span>
                 <span className="text-base font-black text-emerald-950">
-                  {coop.memberCount} {t('verified')}
+                  {coop.membersCount || coop.memberCount || 50} {t('verified')}
                 </span>
               </div>
 
@@ -122,7 +142,7 @@ export const AdminCooperativeSocieties: React.FC = () => {
                   {t('completedCitizenGigs')}
                 </span>
                 <span className="text-base font-black text-slate-900">
-                  {coop.completedJobsTotal.toLocaleString()}
+                  {(coop.completedJobsTotal || 0).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -132,14 +152,20 @@ export const AdminCooperativeSocieties: React.FC = () => {
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>{t('centralRegistrarVerified')}</span>
               </span>
-              <button className="text-slate-600 hover:text-emerald-700 font-bold flex items-center gap-1 cursor-pointer">
-                <span>{t('viewFullAudit')}</span>
-                <ExternalLink className="w-3 h-3" />
-              </button>
+              <span className="font-mono text-[10px] font-bold text-slate-400">
+                Code: {coop.code}
+              </span>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Affiliate Cooperative Modal */}
+      <AdminAffiliateCooperativeModal
+        isOpen={isAffiliateModalOpen}
+        onClose={() => setIsAffiliateModalOpen(false)}
+        onSuccess={handleAffiliateSuccess}
+      />
     </div>
   );
 };

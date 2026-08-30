@@ -19,6 +19,9 @@ import { CustomerSidebar } from './components/customer/CustomerSidebar';
 import { CustomerDashboardOverview } from './components/customer/CustomerDashboardOverview';
 import { ServiceSearchCatalog } from './components/customer/ServiceSearchCatalog';
 import { CustomerBookingsList } from './components/customer/CustomerBookingsList';
+import { CustomerProfileView } from './components/customer/CustomerProfileView';
+import { CustomerMessagesView } from './components/customer/CustomerMessagesView';
+import { CustomerPaymentsView } from './components/customer/CustomerPaymentsView';
 import { WorkerProfileModal } from './components/customer/WorkerProfileModal';
 import { BookingModal } from './components/customer/BookingModal';
 import { EmergencyBookingModal } from './components/customer/EmergencyBookingModal';
@@ -67,6 +70,16 @@ function AppContent() {
       case 'customer-bookings':
       case 'my-bookings':
         return <CustomerBookingsList />;
+      case 'customer-profile':
+      case 'profile':
+        return <CustomerProfileView />;
+      case 'customer-messages':
+      case 'messages':
+        return <CustomerMessagesView />;
+      case 'customer-payments':
+      case 'fair-payments':
+      case 'payments':
+        return <CustomerPaymentsView />;
       case 'customer-dashboard':
       default:
         return <CustomerDashboardOverview />;

@@ -85,12 +85,14 @@ export const WorkerActiveJobTracker: React.FC = () => {
   const isStep2Done = isInProgress || isCompleted;
   const isStep3Done = isCompleted;
 
-  const handleStartTravel = () => {
-    updateBookingStatus(activeBooking.id, 'travelling');
+  const handleStartTravel = async () => {
+    if (!activeBooking) return;
+    await updateBookingStatus(activeBooking.id, 'travelling');
   };
 
-  const handleArrived = () => {
-    updateBookingStatus(activeBooking.id, 'arrived');
+  const handleArrived = async () => {
+    if (!activeBooking) return;
+    await updateBookingStatus(activeBooking.id, 'arrived');
   };
 
   const handleVerifyOtpAndStart = async (e: React.FormEvent) => {

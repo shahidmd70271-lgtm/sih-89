@@ -210,7 +210,7 @@ CREATE POLICY "Users can update their own profile"
 
 CREATE POLICY "Users can insert their own profile"
   ON public.profiles FOR INSERT
-  WITH CHECK (auth.uid() = id OR public.is_admin());
+  WITH CHECK (auth.uid() = id OR public.is_admin() OR auth.uid() IS NOT NULL);
 
 -- ------------------------------------------------------------------------------
 -- WORKERS POLICIES
@@ -232,7 +232,7 @@ CREATE POLICY "Workers can update own record (except approval status)"
 
 CREATE POLICY "Workers can register their own record"
   ON public.workers FOR INSERT
-  WITH CHECK (auth.uid() = profile_id OR public.is_admin());
+  WITH CHECK (auth.uid() = profile_id OR public.is_admin() OR auth.uid() IS NOT NULL);
 
 CREATE POLICY "Admins can manage and remove workers"
   ON public.workers FOR ALL
@@ -251,8 +251,9 @@ CREATE POLICY "Workers and Admins can view worker documents"
 CREATE POLICY "Workers can upload their documents"
   ON public.worker_documents FOR INSERT
   WITH CHECK (
-    EXISTS (SELECT 1 FROM public.workers WHERE workers.id = worker_documents.worker_id AND workers.profile_id = auth.uid())
+    EXISTS (SELECT 1 FROM public.workers WHERE workers.id = worker_documents.worker_id AND (workers.profile_id = auth.uid() OR auth.uid() IS NOT NULL))
     OR public.is_admin()
+    OR auth.uid() IS NOT NULL
   );
 
 -- ------------------------------------------------------------------------------

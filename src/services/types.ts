@@ -41,4 +41,5 @@ export interface ISahaayakService {
 
   // Cooperatives
   getCooperatives(): Promise<CooperativeSociety[]>;
+  createCooperative(coopData: Partial<CooperativeSociety>): Promise<CooperativeSociety>;
 }

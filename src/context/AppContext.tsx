@@ -12,6 +12,7 @@ import {
   AuthUser,
   PaymentMode,
   Payment,
+  CooperativeSociety,
 } from '../types';
 import { translate } from '../translations';
 import { authService } from '../services/authService';
@@ -57,6 +58,7 @@ interface AppContextType {
   // Data & State
   workers: Worker[];
   currentWorker: Worker | null;
+  cooperatives: CooperativeSociety[];
   bookings: Booking[];
   activeBooking: Booking | null;
   selectedWorker: Worker | null;
@@ -96,7 +98,7 @@ interface AppContextType {
   openBookingForWorker: (worker: Worker, isEmergency?: boolean) => void;
   openWorkerProfile: (worker: Worker) => void;
   createNewBooking: (newBookingData: Partial<Booking>) => Promise<Booking>;
-  updateBookingStatus: (bookingId: string, status: BookingStatus) => void;
+  updateBookingStatus: (bookingId: string, status: BookingStatus) => Promise<void>;
   acceptBookingByWorker: (bookingId: string, workerId?: string) => Promise<void>;
   rejectBookingByWorker: (bookingId: string, workerId?: string, reason?: string) => Promise<void>;
   verifyOtpAndStartService: (bookingId: string, enteredOtp: string) => Promise<{ success: boolean; message: string }>;
@@ -105,6 +107,7 @@ interface AppContextType {
   rejectWorkerVerification: (workerId: string) => Promise<void>;
   removeWorkerFromNetwork: (workerId: string, reason?: string) => Promise<void>;
   addNewWorker: (workerData: Partial<Worker>) => Promise<Worker>;
+  addCooperative: (coopData: Partial<CooperativeSociety>) => Promise<CooperativeSociety>;
   setActiveBookingById: (bookingId: string) => void;
   openEmergencySOS: (preselectedService?: ServiceType) => void;
   toggleWorkerSlot: (workerId: string, slotId: string) => void;
@@ -196,6 +199,15 @@ const parseRouteFromUrl = (): { view?: string; role?: UserRole } | null => {
   if (rawRoute === 'customer-bookings' || rawRoute === 'my-bookings' || rawRoute === 'bookings') {
     return { view: 'customer-bookings', role: 'customer' };
   }
+  if (rawRoute === 'customer-profile' || rawRoute === 'customer/profile' || rawRoute === 'profile') {
+    return { view: 'customer-profile', role: 'customer' };
+  }
+  if (rawRoute === 'customer-messages' || rawRoute === 'customer/messages' || rawRoute === 'messages') {
+    return { view: 'customer-messages', role: 'customer' };
+  }
+  if (rawRoute === 'customer-payments' || rawRoute === 'customer/payments' || rawRoute === 'fair-payments' || rawRoute === 'payments') {
+    return { view: 'customer-payments', role: 'customer' };
+  }
   if (rawRoute === 'customer' || rawRoute === 'customer-dashboard') {
     return { view: 'customer-dashboard', role: 'customer' };
   }
@@ -242,7 +254,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       view === 'find-services' ||
       view === 'customer-dashboard' ||
       view === 'customer-bookings' ||
-      view === 'my-bookings'
+      view === 'my-bookings' ||
+      view === 'customer-profile' ||
+      view === 'customer-messages' ||
+      view === 'customer-payments'
     ) {
       setCurrentRoleState('customer');
     }
@@ -309,6 +324,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Real database state (initial empty state, filled by real user actions)
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [cooperatives, setCooperatives] = useState<CooperativeSociety[]>([]);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [selectedServiceFilter, setSelectedServiceFilter] = useState<ServiceType | 'All'>('All');
@@ -318,8 +334,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const loadRealData = async () => {
       const dbWorkers = await sahaayakService.getWorkers();
       const dbBookings = await sahaayakService.getBookings();
+      const dbCoops = await sahaayakService.getCooperatives();
       setWorkers(dbWorkers);
       setBookings(dbBookings);
+      setCooperatives(dbCoops);
       if (dbBookings.length > 0) {
         setActiveBookingId(dbBookings[0].id);
       }
@@ -388,7 +406,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : null) ||
     null;
 
-  const activeBooking = activeBookingId ? bookings.find((b) => b.id === activeBookingId) || null : null;
+  const activeBooking =
+    (activeBookingId ? bookings.find((b) => b.id === activeBookingId) || null : null) ||
+    (currentWorker
+      ? bookings.find(
+          (b) =>
+            (b.workerId === currentWorker.id || b.worker_id === currentWorker.id) &&
+            ['accepted', 'travelling', 'arrived', 'in_progress'].includes(b.status)
+        ) || null
+      : null) ||
+    (currentUser?.role === 'customer'
+      ? bookings.find(
+          (b) =>
+            (b.customer_id === currentUser.id || b.customerName === currentUser.name) &&
+            ['requested', 'accepted', 'travelling', 'arrived', 'in_progress'].includes(b.status)
+        ) || null
+      : null) ||
+    (bookings.length > 0 ? bookings[0] : null);
+
   const unreadNotificationsCount = workerNotifications.filter((n) => !n.isRead).length;
 
   const t = (key: string, params?: Record<string, string | number>): string => {
@@ -584,11 +619,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return createdBooking;
   };
 
-  const updateBookingStatus = (bookingId: string, status: BookingStatus) => {
-    sahaayakService.updateBookingStatus(bookingId, status);
+  const updateBookingStatus = async (bookingId: string, status: BookingStatus) => {
+    const updated = await sahaayakService.updateBookingStatus(bookingId, status);
     setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
+      prev.map((b) => (b.id === bookingId ? { ...b, ...updated, status } : b))
     );
+
+    const targetBooking = bookings.find((b) => b.id === bookingId) || activeBooking;
+    if (status === 'travelling') {
+      addWorkerNotification({
+        workerId: targetBooking?.workerId || currentWorker?.id || '',
+        type: 'status_update',
+        title: 'Transit Started',
+        message: `You are now en route to ${targetBooking?.customerName || 'customer location'}.`,
+        bookingId,
+      });
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}`,
+          sender: 'system',
+          text: `Worker started travelling to service location. Estimated arrival time updated.`,
+          timestamp: 'Just now',
+        },
+      ]);
+    } else if (status === 'arrived') {
+      addWorkerNotification({
+        workerId: targetBooking?.workerId || currentWorker?.id || '',
+        type: 'status_update',
+        title: 'Arrived at Site',
+        message: `Arrived at customer location. Ask customer for service OTP to start.`,
+        bookingId,
+      });
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}`,
+          sender: 'system',
+          text: `Worker arrived at doorstep. Please share your 4-digit service PIN to begin service.`,
+          timestamp: 'Just now',
+        },
+      ]);
+    }
   };
 
   const acceptBookingByWorker = async (bookingId: string, workerId?: string) => {
@@ -703,6 +775,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return createdWorker;
   };
 
+  const addCooperative = async (coopData: Partial<CooperativeSociety>): Promise<CooperativeSociety> => {
+    const createdCoop = await sahaayakService.createCooperative(coopData);
+    setCooperatives((prev) => [createdCoop, ...prev]);
+    return createdCoop;
+  };
+
   // Job and Payment Handling
   const recordPaymentAndCompleteJob = async (
     bookingId: string,
@@ -786,6 +864,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout,
         workers,
         currentWorker,
+        cooperatives,
         bookings,
         activeBooking,
         selectedWorker,
@@ -826,6 +905,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rejectWorkerVerification,
         removeWorkerFromNetwork,
         addNewWorker,
+        addCooperative,
         setActiveBookingById,
         openEmergencySOS,
         toggleWorkerSlot,

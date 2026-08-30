@@ -15,11 +15,158 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 const STORAGE_KEY_WORKERS = 'sahaayak_real_workers_db';
 const STORAGE_KEY_BOOKINGS = 'sahaayak_real_bookings_db';
 const STORAGE_KEY_PAYMENTS = 'sahaayak_real_payments_db';
+const STORAGE_KEY_COOPERATIVES = 'sahaayak_real_cooperatives_db';
+
+export const mapDbRowToWorker = (row: any): Worker => {
+  const isApproved =
+    row.approval_status === 'approved' ||
+    row.approval_status === 'Verified' ||
+    row.is_verified === true ||
+    row.isVerified === true;
+
+  const isRejected =
+    row.approval_status === 'rejected' ||
+    row.approval_status === 'Rejected' ||
+    row.verificationStatus === 'Rejected' ||
+    row.verificationStatus === 'rejected';
+
+  const isRemoved =
+    row.approval_status === 'removed' ||
+    row.approval_status === 'Removed' ||
+    row.status === 'removed' ||
+    row.status === 'inactive' ||
+    row.verificationStatus === 'Removed' ||
+    row.verificationStatus === 'Inactive';
+
+  const verificationStatus: Worker['verificationStatus'] = isRemoved
+    ? 'Removed'
+    : isApproved
+    ? 'Verified'
+    : isRejected
+    ? 'Rejected'
+    : 'Pending';
+
+  return {
+    id: row.id,
+    profile_id: row.profile_id,
+    applicationId: row.application_id || row.applicationId || row.id,
+    appliedDate: row.applied_date || row.appliedDate || 'Today',
+    name: row.name || 'Worker Applicant',
+    avatar: row.avatar || 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400&auto=format&fit=crop&q=80',
+    skill: (row.primary_skill || row.skill || 'Plumbing') as ServiceType,
+    secondarySkills: row.secondary_skills || row.secondarySkills || [],
+    rating: Number(row.safety_rating || row.rating) || 5.0,
+    reviewsCount: Array.isArray(row.reviews) ? row.reviews.length : (Number(row.reviews_count) || 0),
+    experienceYears: Number(row.experience != null ? row.experience : row.experienceYears) || 3,
+    distanceKm: Number(row.distanceKm) || 1.5,
+    basePricePerHour: Number(row.base_price_per_hour != null ? row.base_price_per_hour : row.basePricePerHour) || 250,
+    availability: (row.availability_status || row.availability || 'Available Today') as any,
+    isVerified: isApproved && !isRemoved,
+    verificationStatus,
+    status: isRemoved ? 'removed' : isApproved ? 'active' : isRejected ? 'rejected' : 'pending',
+    approval_status: row.approval_status || (isApproved ? 'approved' : 'pending'),
+    is_active: isApproved && !isRemoved,
+    cooperativeId: row.cooperative_id || row.cooperativeId || 'coop-1',
+    cooperativeName: row.cooperative_name || row.cooperativeName || 'National Federation of Labour Cooperatives (NLCF)',
+    completedJobs: Number(row.completed_jobs != null ? row.completed_jobs : row.completedJobs) || 0,
+    workingHours: row.working_hours || row.workingHours || '9:00 AM - 7:00 PM',
+    location: row.location || (row.address?.town ? `${row.address.town}, ${row.address.state || ''}` : 'Local Cooperative Area'),
+    latitude: row.latitude != null ? Number(row.latitude) : undefined,
+    longitude: row.longitude != null ? Number(row.longitude) : undefined,
+    phone: row.phone || '',
+    email: row.email || '',
+    bio: row.bio || 'Skilled Labour Cooperative trade worker.',
+    languages: row.languages || ['English', 'Hindi'],
+    certifications: row.certifications || [],
+    verificationDocType: row.verification_doc_type || row.verificationDocType || 'Labour Cooperative Verification Dossier',
+    verificationDate: row.verification_date || row.verificationDate,
+    safetyRating: Number(row.safety_rating) || 5.0,
+    insuranceCovered: row.insurance_covered !== false,
+    emergencyAvailable: row.emergency_available !== false,
+    availabilitySlots: row.availability_slots || row.availabilitySlots || [
+      { id: 's1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
+      { id: 's2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
+      { id: 's3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
+      { id: 's4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
+    ],
+    reviews: row.reviews || [],
+    dob: row.dob,
+    gender: row.gender,
+    address: row.address || {},
+    maskedAadhaar: row.masked_aadhaar || row.maskedAadhaar,
+    membershipId: row.membership_id || row.membershipId,
+    documents: row.documents || [],
+    workSamples: row.work_samples || row.workSamples || [],
+    workDescription: row.work_description || row.workDescription,
+    bankDetails: row.bank_details || row.bankDetails,
+    emergencyContact: row.emergency_contact || row.emergencyContact,
+    insuranceDetails: row.insurance_details || row.insuranceDetails,
+    removedAt: row.removed_at || row.removedAt,
+    removedBy: row.removed_by || row.removedBy,
+    removalReason: row.removal_reason || row.removalReason,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+};
+
+export const mapWorkerToDbRow = (w: Worker, authUserId?: string) => {
+  return {
+    id: w.id,
+    profile_id: authUserId || w.profile_id || null,
+    application_id: w.applicationId || w.id,
+    applied_date: w.appliedDate || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+    name: w.name,
+    avatar: w.avatar,
+    primary_skill: w.skill,
+    secondary_skills: w.secondarySkills || [],
+    experience: w.experienceYears || 0,
+    base_price_per_hour: w.basePricePerHour || 250,
+    city: w.address?.town || 'Delhi NCR',
+    location: w.location || 'Local Cooperative Area',
+    latitude: w.latitude != null ? w.latitude : null,
+    longitude: w.longitude != null ? w.longitude : null,
+    phone: w.phone || null,
+    email: w.email || null,
+    bio: w.bio || 'Skilled Labour Cooperative trade worker.',
+    languages: w.languages || ['English', 'Hindi'],
+    cooperative_id: w.cooperativeId || 'coop-1',
+    cooperative_name: w.cooperativeName || 'National Federation of Labour Cooperatives (NLCF)',
+    completed_jobs: w.completedJobs || 0,
+    working_hours: w.workingHours || '9:00 AM - 7:00 PM',
+    availability_status: w.availability || 'Available Today',
+    approval_status: (w.approval_status || (w.isVerified ? 'approved' : 'pending')) as string,
+    is_verified: !!w.isVerified,
+    is_active: !!w.is_active,
+    verification_doc_type: w.verificationDocType || 'Labour Cooperative Verification Dossier',
+    verification_date: w.verificationDate || null,
+    membership_id: w.membershipId || null,
+    masked_aadhaar: w.maskedAadhaar || null,
+    dob: w.dob || null,
+    gender: w.gender || null,
+    safety_rating: w.safetyRating || 5.0,
+    insurance_covered: w.insuranceCovered !== false,
+    emergency_available: w.emergencyAvailable !== false,
+    address: w.address || {},
+    bank_details: w.bankDetails || {},
+    emergency_contact: w.emergencyContact || {},
+    insurance_details: w.insuranceDetails || {},
+    availability_slots: w.availabilitySlots || [],
+    certifications: w.certifications || [],
+    work_samples: w.workSamples || [],
+    reviews: w.reviews || [],
+    removed_at: w.removedAt || null,
+    removed_by: w.removedBy || null,
+    removal_reason: w.removalReason || null,
+    created_at: w.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
 
 export class SahaayakService implements ISahaayakService {
   private workers: Worker[] = [];
   private bookings: Booking[] = [];
   private payments: Payment[] = [];
+  private cooperatives: CooperativeSociety[] = [];
 
   constructor() {
     this.initDatabase();
@@ -47,6 +194,13 @@ export class SahaayakService implements ISahaayakService {
     } catch {
       this.payments = [];
     }
+
+    try {
+      const storedCoops = localStorage.getItem(STORAGE_KEY_COOPERATIVES);
+      this.cooperatives = storedCoops ? JSON.parse(storedCoops) : [...COOPERATIVE_SOCIETIES];
+    } catch {
+      this.cooperatives = [...COOPERATIVE_SOCIETIES];
+    }
   }
 
   private persistWorkers(): void {
@@ -73,13 +227,24 @@ export class SahaayakService implements ISahaayakService {
     }
   }
 
+  private persistCooperatives(): void {
+    try {
+      localStorage.setItem(STORAGE_KEY_COOPERATIVES, JSON.stringify(this.cooperatives));
+    } catch {
+      // ignore
+    }
+  }
+
   // ===================== WORKERS =====================
   async getWorkers(): Promise<Worker[]> {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.from('workers').select('*');
         if (!error && data) {
-          return data as Worker[];
+          const mapped = data.map(mapDbRowToWorker);
+          this.workers = mapped;
+          this.persistWorkers();
+          return mapped;
         }
       } catch (err) {
         console.warn('Supabase query error, fallback to persistent store:', err);
@@ -122,10 +287,10 @@ export class SahaayakService implements ISahaayakService {
         const { data, error } = await supabase
           .from('workers')
           .select('*')
-          .eq('id', id)
-          .single();
+          .or(`id.eq.${id},profile_id.eq.${id}`)
+          .maybeSingle();
         if (!error && data) {
-          return data as Worker;
+          return mapDbRowToWorker(data);
         }
       } catch {
         // fallback
@@ -185,22 +350,23 @@ export class SahaayakService implements ISahaayakService {
           authUserId = authData.user.id;
         }
 
-        // Upsert profiles table
+        // Upsert profiles table with role = 'worker'
         if (authUserId) {
-          try {
-            await supabase.from('profiles').upsert([
-              {
-                id: authUserId,
-                role: 'worker',
-                full_name: workerData.name || 'Worker Applicant',
-                email: cleanEmail,
-                phone: cleanPhone,
-                avatar_url: workerData.avatar,
-                created_at: new Date().toISOString(),
-              },
-            ]);
-          } catch {
-            // continue
+          const { error: profileError } = await supabase.from('profiles').upsert([
+            {
+              id: authUserId,
+              role: 'worker',
+              full_name: workerData.name || 'Worker Applicant',
+              email: cleanEmail,
+              phone: cleanPhone || null,
+              avatar_url: workerData.avatar || null,
+              status: 'active',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ]);
+          if (profileError) {
+            console.warn('Profiles upsert warning:', profileError.message);
           }
         }
       } catch (authErr: any) {
@@ -209,8 +375,9 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
+    const newWorkerId = `wkr-${Date.now()}`;
     const newWorker: Worker = {
-      id: `wkr-${Date.now()}`,
+      id: newWorkerId,
       profile_id: authUserId,
       applicationId: appId,
       appliedDate: now,
@@ -229,12 +396,15 @@ export class SahaayakService implements ISahaayakService {
       isVerified: false,
       verificationStatus: 'Pending',
       status: 'pending',
+      approval_status: 'pending',
       is_active: false,
       cooperativeId: workerData.cooperativeId || 'coop-1',
       cooperativeName: workerData.cooperativeName || 'National Federation of Labour Cooperatives (NLCF)',
       completedJobs: 0,
       workingHours: workerData.workingHours || '9:00 AM - 7:00 PM',
       location: workerData.location || (workerData.address?.town ? `${workerData.address.town}, ${workerData.address.state || ''}` : 'Local Cooperative Area'),
+      latitude: workerData.latitude,
+      longitude: workerData.longitude,
       phone: cleanPhone,
       bio: workerData.bio || 'Skilled Labour Cooperative trade worker.',
       languages: workerData.languages && workerData.languages.length > 0 ? workerData.languages : ['English', 'Hindi'],
@@ -269,13 +439,33 @@ export class SahaayakService implements ISahaayakService {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('workers').insert([newWorker]);
-      } catch {
-        // continue
+        const dbRow = mapWorkerToDbRow(newWorker, authUserId);
+        const { error: insertErr } = await supabase.from('workers').insert([dbRow]);
+        if (insertErr) {
+          console.warn('Worker insert warning into Supabase:', insertErr.message);
+          throw new Error(`Failed to persist worker record in Supabase: ${insertErr.message}`);
+        }
+
+        // Insert documents into worker_documents table if present
+        if (workerData.documents && workerData.documents.length > 0) {
+          const docRows = workerData.documents.map((doc) => ({
+            worker_id: newWorker.id,
+            document_type: doc.type || doc.document_type || 'Identity Proof',
+            document_name: doc.name || 'Verification Document',
+            document_url: doc.fileUrl || doc.file_path || 'https://sahaayak.gov.in/docs/sample_kyc.pdf',
+            file_size: doc.fileSize || '1.2 MB',
+            verification_status: 'pending',
+            uploaded_at: new Date().toISOString(),
+          }));
+          await supabase.from('worker_documents').insert(docRows);
+        }
+      } catch (err: any) {
+        console.error('Database persistence error during worker registration:', err);
+        throw err;
       }
     }
 
-    this.workers = [newWorker, ...this.workers];
+    this.workers = [newWorker, ...this.workers.filter((w) => w.id !== newWorker.id)];
     this.persistWorkers();
     return newWorker;
   }
@@ -287,6 +477,7 @@ export class SahaayakService implements ISahaayakService {
     worker.isVerified = true;
     worker.verificationStatus = 'Verified';
     worker.status = 'active';
+    worker.approval_status = 'approved';
     worker.is_active = true;
     worker.availability = 'Available Today';
     worker.verificationDate = new Date().toLocaleDateString('en-IN', {
@@ -298,20 +489,22 @@ export class SahaayakService implements ISahaayakService {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
+        const { error: updateErr } = await supabase
           .from('workers')
           .update({
-            isVerified: true,
-            verificationStatus: 'Verified',
-            status: 'active',
+            is_verified: true,
+            approval_status: 'approved',
             is_active: true,
-            availability: 'Available Today',
-            verificationDate: worker.verificationDate,
+            availability_status: 'Available Today',
+            verification_date: worker.verificationDate,
             updated_at: worker.updated_at,
           })
-          .eq('id', workerId);
-      } catch {
-        // continue
+          .eq('id', worker.id);
+        if (updateErr) {
+          console.warn('Worker approval update error in Supabase:', updateErr.message);
+        }
+      } catch (err) {
+        console.warn('Worker approval update exception:', err);
       }
     }
 
@@ -325,25 +518,30 @@ export class SahaayakService implements ISahaayakService {
       worker.isVerified = false;
       worker.verificationStatus = 'Rejected';
       worker.status = 'rejected';
+      worker.approval_status = 'rejected';
       worker.is_active = false;
       worker.availability = 'Offline';
+      worker.removalReason = reason || 'Application rejected during verification';
       worker.updated_at = new Date().toISOString();
 
       if (isSupabaseConfigured && supabase) {
         try {
-          await supabase
+          const { error: updateErr } = await supabase
             .from('workers')
             .update({
-              isVerified: false,
-              verificationStatus: 'Rejected',
-              status: 'rejected',
+              is_verified: false,
+              approval_status: 'rejected',
               is_active: false,
-              availability: 'Offline',
+              availability_status: 'Offline',
+              removal_reason: worker.removalReason,
               updated_at: worker.updated_at,
             })
-            .eq('id', workerId);
-        } catch {
-          // continue
+            .eq('id', worker.id);
+          if (updateErr) {
+            console.warn('Worker rejection update error in Supabase:', updateErr.message);
+          }
+        } catch (err) {
+          console.warn('Worker rejection exception:', err);
         }
       }
 
@@ -358,6 +556,7 @@ export class SahaayakService implements ISahaayakService {
     worker.isVerified = false;
     worker.verificationStatus = 'Removed';
     worker.status = 'removed';
+    worker.approval_status = 'removed';
     worker.is_active = false;
     worker.availability = 'Offline';
     worker.removedAt = new Date().toISOString();
@@ -367,20 +566,24 @@ export class SahaayakService implements ISahaayakService {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
+        const { error: updateErr } = await supabase
           .from('workers')
           .update({
-            isVerified: false,
-            verificationStatus: 'Removed',
-            status: 'removed',
+            is_verified: false,
+            approval_status: 'removed',
             is_active: false,
-            availability: 'Offline',
+            availability_status: 'Offline',
             removed_at: worker.removedAt,
+            removed_by: worker.removedBy,
+            removal_reason: worker.removalReason,
             updated_at: worker.updated_at,
           })
-          .eq('id', workerId);
-      } catch {
-        // continue
+          .eq('id', worker.id);
+        if (updateErr) {
+          console.warn('Worker removal update error in Supabase:', updateErr.message);
+        }
+      } catch (err) {
+        console.warn('Worker removal exception:', err);
       }
     }
 
@@ -631,21 +834,25 @@ export class SahaayakService implements ISahaayakService {
     const booking = this.bookings.find((b) => b.id === bookingId);
     if (!booking) throw new Error('Booking not found');
 
-    const finalAmount = (booking.estimatedPrice || 299) + extraMaterialsCost;
+    const platformFee = booking.platformFee ?? 15;
+    const welfareCess = booking.welfareCess ?? 15;
+    const baseWage = booking.estimatedPrice || 299;
+    const totalAmount = baseWage + extraMaterialsCost + platformFee + welfareCess;
+
     booking.status = 'completed';
     booking.paymentMode = paymentMode;
     booking.extraMaterialsCost = extraMaterialsCost;
-    booking.totalAmount = finalAmount + (booking.platformFee || 15) + (booking.welfareCess || 15);
+    booking.totalAmount = totalAmount;
     booking.completedAt = 'Just now';
 
     // Create payment record
-    const workerNet = Math.round(finalAmount * 0.90);
+    const workerNet = Math.round(baseWage * 0.90) + extraMaterialsCost;
     const paymentRecord: Payment = {
       id: `pay-${Date.now()}`,
       booking_id: booking.id,
       customer_id: booking.customer_id || 'customer',
       worker_id: booking.workerId,
-      amount: finalAmount,
+      amount: totalAmount,
       workerNet,
       worker_net: workerNet,
       extra_parts_amount: extraMaterialsCost,
@@ -842,7 +1049,86 @@ export class SahaayakService implements ISahaayakService {
   }
 
   async getCooperatives(): Promise<CooperativeSociety[]> {
-    return [...COOPERATIVE_SOCIETIES];
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('cooperatives').select('*');
+        if (!error && data && data.length > 0) {
+          const mapped = data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            code: d.code || `COOP-${d.id}`,
+            state: d.state || 'Delhi NCR',
+            district: d.district || d.location || 'Central',
+            location: d.location || d.district || 'New Delhi',
+            membersCount: Number(d.members_count || d.member_count) || 100,
+            memberCount: Number(d.members_count || d.member_count) || 100,
+            establishedYear: Number(d.established_year) || 2020,
+            registrationNumber: d.registration_number || 'MSCS/CR/2026/001',
+            verifiedWorkersCount: Number(d.verified_workers_count) || 50,
+            contactNumber: d.contact_number || d.contact_phone || '+91 11 2685 4120',
+            contactPhone: d.contact_phone || d.contact_number || '+91 11 2685 4120',
+            rating: Number(d.rating) || 4.8,
+            completedJobsTotal: Number(d.completed_jobs_total) || 120,
+          }));
+          this.cooperatives = mapped;
+          this.persistCooperatives();
+          return mapped;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return [...this.cooperatives];
+  }
+
+  async createCooperative(coopData: Partial<CooperativeSociety>): Promise<CooperativeSociety> {
+    const newCoopId = `coop-${Date.now()}`;
+    const newCoop: CooperativeSociety = {
+      id: newCoopId,
+      name: coopData.name?.trim() || 'Labour Welfare Cooperative Society',
+      code: coopData.code?.trim() || `LCS-${Date.now().toString().slice(-4)}`,
+      state: coopData.state?.trim() || 'Delhi NCR',
+      district: coopData.district?.trim() || 'Central',
+      location: coopData.location?.trim() || `${coopData.district || 'City'}, ${coopData.state || 'State'}`,
+      membersCount: Number(coopData.membersCount || coopData.memberCount) || 50,
+      memberCount: Number(coopData.memberCount || coopData.membersCount) || 50,
+      establishedYear: Number(coopData.establishedYear) || new Date().getFullYear(),
+      registrationNumber: coopData.registrationNumber?.trim() || `MSCS/CR/${Date.now().toString().slice(-4)}`,
+      verifiedWorkersCount: Number(coopData.verifiedWorkersCount) || 0,
+      contactNumber: coopData.contactNumber?.trim() || coopData.contactPhone?.trim() || '+91 11 2685 4120',
+      contactPhone: coopData.contactPhone?.trim() || coopData.contactNumber?.trim() || '+91 11 2685 4120',
+      rating: 5.0,
+      completedJobsTotal: 0,
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('cooperatives').insert([
+          {
+            id: newCoop.id,
+            name: newCoop.name,
+            code: newCoop.code,
+            state: newCoop.state,
+            district: newCoop.district,
+            location: newCoop.location,
+            members_count: newCoop.membersCount,
+            established_year: newCoop.establishedYear,
+            registration_number: newCoop.registrationNumber,
+            verified_workers_count: newCoop.verifiedWorkersCount,
+            contact_number: newCoop.contactNumber,
+            rating: newCoop.rating,
+            completed_jobs_total: newCoop.completedJobsTotal,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      } catch (err) {
+        console.warn('Supabase cooperative insert warning:', err);
+      }
+    }
+
+    this.cooperatives = [newCoop, ...this.cooperatives];
+    this.persistCooperatives();
+    return newCoop;
   }
 }
 

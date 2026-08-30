@@ -16,7 +16,7 @@ import { useApp } from '../../context/AppContext';
 import { COOPERATIVE_SOCIETIES } from '../../data/mockData';
 
 export const AdminDashboardOverview: React.FC = () => {
-  const { workers, approveWorkerVerification, rejectWorkerVerification, setActiveView, t } = useApp();
+  const { workers, cooperatives, approveWorkerVerification, rejectWorkerVerification, setActiveView, t } = useApp();
 
   const pendingWorkers = workers.filter(
     (w) =>
@@ -177,7 +177,7 @@ export const AdminDashboardOverview: React.FC = () => {
         </div>
 
         <div className="divide-y divide-slate-100 overflow-x-auto">
-          {COOPERATIVE_SOCIETIES.map((coop) => (
+          {(cooperatives && cooperatives.length > 0 ? cooperatives : COOPERATIVE_SOCIETIES).map((coop) => (
             <div key={coop.id} className="py-4 flex items-center justify-between gap-4 min-w-[600px]">
               <div>
                 <div className="flex items-center gap-2">
