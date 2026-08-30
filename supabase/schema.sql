@@ -317,3 +317,15 @@ CREATE TRIGGER trg_record_worker_earnings
   AFTER INSERT OR UPDATE OF payment_status ON public.payments
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_payment_paid_trigger();
+
+-- ==============================================================================
+-- 10. POSTGRESQL ROLE PRIVILEGES (CRITICAL FOR POSTGREST & SUPABASE JS CLIENT)
+-- ==============================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;

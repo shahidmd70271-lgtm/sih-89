@@ -239,15 +239,22 @@ export class SahaayakService implements ISahaayakService {
   async getWorkers(): Promise<Worker[]> {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('workers').select('*');
-        if (!error && data) {
+        console.log('[Supabase getWorkers] Fetching workers from Supabase public.workers table...');
+        const { data, error } = await supabase.from('workers').select('*').order('created_at', { ascending: false });
+        if (error) {
+          console.error('[Supabase getWorkers] Query failed:', error);
+          throw new Error(`Failed to fetch workers from Supabase: ${error.message} (${error.code}). ${error.hint || ''}`);
+        }
+        if (data) {
+          console.log(`[Supabase getWorkers] Retrieved ${data.length} worker records from database.`);
           const mapped = data.map(mapDbRowToWorker);
           this.workers = mapped;
           this.persistWorkers();
           return mapped;
         }
-      } catch (err) {
-        console.warn('Supabase query error, fallback to persistent store:', err);
+      } catch (err: any) {
+        console.error('[Supabase getWorkers] Exception during fetch:', err);
+        throw err;
       }
     }
     return [...this.workers];
@@ -316,6 +323,7 @@ export class SahaayakService implements ISahaayakService {
     // 1. If Supabase is configured and credentials provided, create real Supabase Auth user
     if (isSupabaseConfigured && supabase && cleanEmail && cleanPass) {
       try {
+        console.log('[Supabase Worker Registration] Initiating Auth signUp for:', cleanEmail);
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: cleanEmail,
           password: cleanPass,
@@ -328,23 +336,30 @@ export class SahaayakService implements ISahaayakService {
           },
         });
 
+        console.log('[Supabase Worker Registration] Auth signUp response:', {
+          userId: authData?.user?.id,
+          hasSession: !!authData?.session,
+          error: authError?.message,
+        });
+
         if (authError) {
           if (
             authError.message.toLowerCase().includes('already registered') ||
             authError.message.toLowerCase().includes('already in use')
           ) {
-            // Existing user, sign in to link user ID
+            console.log('[Supabase Worker Registration] Account exists, signing in with password...');
             const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
               email: cleanEmail,
               password: cleanPass,
             });
             if (!signInErr && signInData.user) {
               authUserId = signInData.user.id;
+              console.log('[Supabase Worker Registration] Successfully signed in existing user:', authUserId);
             } else {
               throw new Error('An account with this email is already registered. Please sign in or provide the correct password.');
             }
           } else {
-            throw new Error(authError.message || 'Worker registration failed in Supabase Auth.');
+            throw new Error(`Supabase Auth error: ${authError.message}`);
           }
         } else if (authData.user) {
           authUserId = authData.user.id;
@@ -352,25 +367,28 @@ export class SahaayakService implements ISahaayakService {
 
         // Upsert profiles table with role = 'worker'
         if (authUserId) {
-          const { error: profileError } = await supabase.from('profiles').upsert([
-            {
-              id: authUserId,
-              role: 'worker',
-              full_name: workerData.name || 'Worker Applicant',
-              email: cleanEmail,
-              phone: cleanPhone || null,
-              avatar_url: workerData.avatar || null,
-              status: 'active',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ]);
+          console.log('[Supabase Worker Registration] Upserting public.profiles with UUID:', authUserId);
+          const profilePayload = {
+            id: authUserId,
+            role: 'worker',
+            full_name: workerData.name || 'Worker Applicant',
+            email: cleanEmail,
+            phone: cleanPhone || null,
+            avatar_url: workerData.avatar || null,
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          const { error: profileError } = await supabase.from('profiles').upsert([profilePayload]);
+          console.log('[Supabase Worker Registration] public.profiles upsert result:', profileError || 'SUCCESS');
           if (profileError) {
-            console.warn('Profiles upsert warning:', profileError.message);
+            console.error('[Supabase Worker Registration] Profile creation failed:', profileError);
+            throw new Error(`Failed to create worker profile in Supabase: ${profileError.message} (${profileError.code}). ${profileError.hint || ''}`);
           }
         }
       } catch (authErr: any) {
-        console.warn('Supabase Auth error during worker registration:', authErr);
+        console.error('[Supabase Worker Registration] Auth & Profile step failed:', authErr);
         throw authErr;
       }
     }
@@ -439,15 +457,18 @@ export class SahaayakService implements ISahaayakService {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        console.log('[Supabase Worker Registration] Inserting row into public.workers table...');
         const dbRow = mapWorkerToDbRow(newWorker, authUserId);
         const { error: insertErr } = await supabase.from('workers').insert([dbRow]);
+        console.log('[Supabase Worker Registration] public.workers insert result:', insertErr || 'SUCCESS');
         if (insertErr) {
-          console.warn('Worker insert warning into Supabase:', insertErr.message);
-          throw new Error(`Failed to persist worker record in Supabase: ${insertErr.message}`);
+          console.error('[Supabase Worker Registration] Worker insert failed:', insertErr);
+          throw new Error(`Failed to persist worker record in Supabase: ${insertErr.message} (${insertErr.code}). ${insertErr.hint || ''}`);
         }
 
         // Insert documents into worker_documents table if present
         if (workerData.documents && workerData.documents.length > 0) {
+          console.log('[Supabase Worker Registration] Inserting worker documents...');
           const docRows = workerData.documents.map((doc) => ({
             worker_id: newWorker.id,
             document_type: doc.type || doc.document_type || 'Identity Proof',
@@ -457,10 +478,15 @@ export class SahaayakService implements ISahaayakService {
             verification_status: 'pending',
             uploaded_at: new Date().toISOString(),
           }));
-          await supabase.from('worker_documents').insert(docRows);
+          const { error: docErr } = await supabase.from('worker_documents').insert(docRows);
+          console.log('[Supabase Worker Registration] worker_documents insert result:', docErr || 'SUCCESS');
+          if (docErr) {
+            console.warn('[Supabase Worker Registration] Non-blocking documents insert warning:', docErr.message);
+          }
         }
+        console.log('[Supabase Worker Registration] Successfully completed database registration for worker ID:', newWorker.id);
       } catch (err: any) {
-        console.error('Database persistence error during worker registration:', err);
+        console.error('[Supabase Worker Registration] Database persistence failed:', err);
         throw err;
       }
     }

@@ -332,14 +332,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load database records on mount & subscribe to Supabase Realtime updates
   useEffect(() => {
     const loadRealData = async () => {
-      const dbWorkers = await sahaayakService.getWorkers();
-      const dbBookings = await sahaayakService.getBookings();
-      const dbCoops = await sahaayakService.getCooperatives();
-      setWorkers(dbWorkers);
-      setBookings(dbBookings);
-      setCooperatives(dbCoops);
-      if (dbBookings.length > 0) {
-        setActiveBookingId(dbBookings[0].id);
+      try {
+        console.log('[AppContext] Loading backend records from Supabase...');
+        const [dbWorkers, dbBookings, dbCoops] = await Promise.all([
+          sahaayakService.getWorkers().catch((err) => {
+            console.error('[AppContext] Workers load failed:', err);
+            return [];
+          }),
+          sahaayakService.getBookings().catch((err) => {
+            console.error('[AppContext] Bookings load failed:', err);
+            return [];
+          }),
+          sahaayakService.getCooperatives().catch((err) => {
+            console.error('[AppContext] Cooperatives load failed:', err);
+            return [];
+          }),
+        ]);
+        console.log('[AppContext] Loaded records:', {
+          workers: dbWorkers.length,
+          bookings: dbBookings.length,
+          cooperatives: dbCoops.length,
+        });
+        setWorkers(dbWorkers);
+        setBookings(dbBookings);
+        setCooperatives(dbCoops);
+        if (dbBookings.length > 0) {
+          setActiveBookingId(dbBookings[0].id);
+        }
+      } catch (err) {
+        console.error('[AppContext] Global load error:', err);
       }
     };
     loadRealData();
