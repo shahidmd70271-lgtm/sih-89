@@ -164,162 +164,29 @@ CREATE TABLE IF NOT EXISTS public.worker_earnings (
 );
 
 -- ==============================================================================
--- 7. INDEXES FOR HIGH-PERFORMANCE QUERIES
+-- 7. COOPERATIVE SOCIETIES TABLE
 -- ==============================================================================
-CREATE INDEX IF NOT EXISTS idx_workers_approval_active ON public.workers(approval_status, is_active);
-CREATE INDEX IF NOT EXISTS idx_workers_profile_id ON public.workers(profile_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON public.bookings(customer_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_worker_id ON public.bookings(worker_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_status ON public.bookings(status);
-CREATE INDEX IF NOT EXISTS idx_payments_worker_id ON public.payments(worker_id);
-CREATE INDEX IF NOT EXISTS idx_worker_earnings_worker_id ON public.worker_earnings(worker_id);
-
--- ==============================================================================
--- 8. ROW LEVEL SECURITY (RLS) POLICIES
--- ==============================================================================
-
--- Enable RLS on all tables
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.workers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.worker_documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.worker_earnings ENABLE ROW LEVEL SECURITY;
-
--- Helper function to check if current user is an Admin
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid() AND role = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- ------------------------------------------------------------------------------
--- PROFILES POLICIES
--- ------------------------------------------------------------------------------
-CREATE POLICY "Users and admins can view profiles"
-  ON public.profiles FOR SELECT
-  USING (true);
-
-CREATE POLICY "Users can update their own profile"
-  ON public.profiles FOR UPDATE
-  USING (auth.uid() = id OR public.is_admin());
-
-CREATE POLICY "Users can insert their own profile"
-  ON public.profiles FOR INSERT
-  WITH CHECK (auth.uid() = id OR public.is_admin() OR auth.uid() IS NOT NULL OR true);
-
--- ------------------------------------------------------------------------------
--- WORKERS POLICIES
--- Customers & Public: can view approved active workers
--- Workers: can read/update their own worker record
--- Admin: full access to manage all workers
--- ------------------------------------------------------------------------------
-CREATE POLICY "Public & Customers can view approved active workers"
-  ON public.workers FOR SELECT
-  USING (
-    (approval_status = 'approved' AND is_active = TRUE)
-    OR (auth.uid() = profile_id)
-    OR public.is_admin()
-    OR true
-  );
-
-CREATE POLICY "Workers and admins can update worker records"
-  ON public.workers FOR UPDATE
-  USING (auth.uid() = profile_id OR public.is_admin() OR true);
-
-CREATE POLICY "Workers can register their own record"
-  ON public.workers FOR INSERT
-  WITH CHECK (auth.uid() = profile_id OR public.is_admin() OR auth.uid() IS NOT NULL OR true);
-
-CREATE POLICY "Admins can manage and remove workers"
-  ON public.workers FOR ALL
-  USING (public.is_admin() OR true);
-
--- ------------------------------------------------------------------------------
--- WORKER DOCUMENTS POLICIES
--- ------------------------------------------------------------------------------
-CREATE POLICY "Workers and Admins can view worker documents"
-  ON public.worker_documents FOR SELECT
-  USING (true);
-
-CREATE POLICY "Workers can upload their documents"
-  ON public.worker_documents FOR INSERT
-  WITH CHECK (true);
-
--- ------------------------------------------------------------------------------
--- BOOKINGS POLICIES
--- Customers: can create/view their own bookings
--- Workers: can view & update bookings assigned to them
--- Admins: can view all bookings
--- ------------------------------------------------------------------------------
-CREATE POLICY "Customers and Workers can view their own bookings"
-  ON public.bookings FOR SELECT
-  USING (
-    customer_id = auth.uid()
-    OR EXISTS (SELECT 1 FROM public.workers WHERE workers.id = bookings.worker_id AND workers.profile_id = auth.uid())
-    OR public.is_admin()
-  );
-
-CREATE POLICY "Customers can create bookings"
-  ON public.bookings FOR INSERT
-  WITH CHECK (
-    customer_id = auth.uid()
-    OR public.is_admin()
-  );
-
-CREATE POLICY "Participants can update their bookings"
-  ON public.bookings FOR UPDATE
-  USING (
-    customer_id = auth.uid()
-    OR EXISTS (SELECT 1 FROM public.workers WHERE workers.id = bookings.worker_id AND workers.profile_id = auth.uid())
-    OR public.is_admin()
-  );
-
--- ------------------------------------------------------------------------------
--- PAYMENTS & WORKER EARNINGS POLICIES
--- ------------------------------------------------------------------------------
-CREATE POLICY "Participants can view their payments"
-  ON public.payments FOR SELECT
-  USING (
-    customer_id = auth.uid()
-    OR EXISTS (SELECT 1 FROM public.workers WHERE workers.id = payments.worker_id AND workers.profile_id = auth.uid())
-    OR public.is_admin()
-  );
-
-CREATE POLICY "Workers and Admins can view worker earnings"
-  ON public.worker_earnings FOR SELECT
-  USING (
-    EXISTS (SELECT 1 FROM public.workers WHERE workers.id = worker_earnings.worker_id AND workers.profile_id = auth.uid())
-    OR public.is_admin()
-  );
+CREATE TABLE IF NOT EXISTS public.cooperatives (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  state TEXT NOT NULL,
+  district TEXT NOT NULL,
+  location TEXT NOT NULL,
+  member_count INTEGER DEFAULT 0,
+  members_count INTEGER DEFAULT 0,
+  established_year INTEGER DEFAULT 2026,
+  registration_number TEXT NOT NULL,
+  verified_workers_count INTEGER DEFAULT 0,
+  contact_phone TEXT NOT NULL,
+  contact_number TEXT,
+  rating NUMERIC(3,2) DEFAULT 4.9,
+  completed_jobs_total INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- ==============================================================================
--- 9. AUTO EARNINGS CREATION TRIGGER ON PAID PAYMENT
--- ==============================================================================
-CREATE OR REPLACE FUNCTION public.handle_payment_paid_trigger()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.payment_status = 'paid' AND (OLD.payment_status IS NULL OR OLD.payment_status != 'paid') THEN
-    INSERT INTO public.worker_earnings (worker_id, booking_id, amount)
-    VALUES (NEW.worker_id, NEW.booking_id, NEW.worker_net)
-    ON CONFLICT DO NOTHING;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS trg_record_worker_earnings ON public.payments;
-CREATE TRIGGER trg_record_worker_earnings
-  AFTER INSERT OR UPDATE OF payment_status ON public.payments
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_payment_paid_trigger();
-
--- ==============================================================================
--- 10. POSTGRESQL ROLE PRIVILEGES (CRITICAL FOR POSTGREST & SUPABASE JS CLIENT)
+-- 8. POSTGRESQL ROLE PRIVILEGES (CRITICAL FOR POSTGREST & SUPABASE JS CLIENT)
 -- ==============================================================================
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
@@ -329,3 +196,104 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+-- ==============================================================================
+-- 9. ROW LEVEL SECURITY (RLS) POLICIES
+-- ==============================================================================
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.worker_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.worker_earnings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cooperatives ENABLE ROW LEVEL SECURITY;
+
+-- Profiles Policies
+DROP POLICY IF EXISTS "Users and admins can view profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Users can read their own profile" ON public.profiles;
+CREATE POLICY "Users and admins can view profiles"
+  ON public.profiles FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile"
+  ON public.profiles FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile"
+  ON public.profiles FOR UPDATE
+  USING (true);
+
+-- Workers Policies
+DROP POLICY IF EXISTS "Public & Customers can view approved active workers" ON public.workers;
+CREATE POLICY "Public & Customers can view approved active workers"
+  ON public.workers FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Workers can register their own record" ON public.workers;
+CREATE POLICY "Workers can register their own record"
+  ON public.workers FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Workers and admins can update worker records" ON public.workers;
+CREATE POLICY "Workers and admins can update worker records"
+  ON public.workers FOR UPDATE
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins can manage and remove workers" ON public.workers;
+CREATE POLICY "Admins can manage and remove workers"
+  ON public.workers FOR ALL
+  USING (true);
+
+-- Worker Documents Policies
+DROP POLICY IF EXISTS "Workers and Admins can view worker documents" ON public.worker_documents;
+CREATE POLICY "Workers and Admins can view worker documents"
+  ON public.worker_documents FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Workers can upload their documents" ON public.worker_documents;
+CREATE POLICY "Workers can upload their documents"
+  ON public.worker_documents FOR INSERT
+  WITH CHECK (true);
+
+-- Cooperatives Policies
+DROP POLICY IF EXISTS "Public can view cooperatives" ON public.cooperatives;
+CREATE POLICY "Public can view cooperatives"
+  ON public.cooperatives FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins can manage cooperatives" ON public.cooperatives;
+CREATE POLICY "Admins can manage cooperatives"
+  ON public.cooperatives FOR ALL
+  USING (true);
+
+-- ==============================================================================
+-- 10. AUTH HOOK TRIGGER: AUTOMATIC PROFILE CREATION ON USER SIGN-UP
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, role, full_name, email, phone, status, created_at, updated_at)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'role', 'customer'),
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'Sahaayak User'),
+    NEW.email,
+    NEW.raw_user_meta_data->>'phone',
+    'active',
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    role = EXCLUDED.role,
+    full_name = EXCLUDED.full_name,
+    updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
