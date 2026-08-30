@@ -98,7 +98,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
   isOpen,
   onClose,
 }) => {
-  const { addNewWorker, setCurrentRole, setActiveView, t } = useApp();
+  const { addNewWorker, cooperatives, setCurrentRole, setActiveView, t } = useApp();
 
   // Current Step (1 to 7, Step 8 = Success Screen)
   const [currentStep, setCurrentStep] = useState(1);
@@ -474,7 +474,8 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
     setErrorMessage('');
 
     try {
-      const coopObj = COOPERATIVE_SOCIETIES.find((c) => c.name === cooperativeName) || COOPERATIVE_SOCIETIES[0];
+      const coopList = cooperatives && cooperatives.length > 0 ? cooperatives : COOPERATIVE_SOCIETIES;
+      const coopObj = coopList.find((c) => c.name === cooperativeName) || coopList[0];
       const approxLocation = `${streetLocality ? streetLocality + ', ' : ''}${cityTown}, ${stateName}`;
 
       const createdWorker = await addNewWorker({
@@ -1374,7 +1375,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
                       : 'border-slate-200 focus:outline-emerald-500'
                   }`}
                 >
-                  {COOPERATIVE_SOCIETIES.map((c) => (
+                  {(cooperatives && cooperatives.length > 0 ? cooperatives : COOPERATIVE_SOCIETIES).map((c) => (
                     <option key={c.id} value={c.name}>
                       {c.name} ({c.district}, {c.state})
                     </option>

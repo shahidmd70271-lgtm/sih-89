@@ -746,32 +746,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const approveWorkerVerification = async (workerId: string) => {
-    const updated = await sahaayakService.approveWorkerApplication(workerId);
-    setWorkers((prev) =>
-      prev.map((w) => (w.id === workerId ? { ...w, ...updated } : w))
-    );
+    await sahaayakService.approveWorkerApplication(workerId);
+    const freshWorkers = await sahaayakService.getWorkers();
+    setWorkers(freshWorkers);
   };
 
   const rejectWorkerVerification = async (workerId: string) => {
     await sahaayakService.rejectWorkerApplication(workerId);
-    setWorkers((prev) =>
-      prev.map((w) => (w.id === workerId ? { ...w, verificationStatus: 'Rejected', isVerified: false, status: 'rejected' } : w))
-    );
+    const freshWorkers = await sahaayakService.getWorkers();
+    setWorkers(freshWorkers);
   };
 
   const removeWorkerFromNetwork = async (workerId: string, reason?: string) => {
     if (currentUser?.role !== 'admin') {
       throw new Error('Unauthorized: Only administrators can remove workers from the cooperative network.');
     }
-    const updated = await sahaayakService.removeWorker(workerId, currentUser.id, reason);
-    setWorkers((prev) =>
-      prev.map((w) => (w.id === workerId ? { ...w, ...updated } : w))
-    );
+    await sahaayakService.removeWorker(workerId, currentUser.id, reason);
+    const freshWorkers = await sahaayakService.getWorkers();
+    setWorkers(freshWorkers);
   };
 
   const addNewWorker = async (workerData: Partial<Worker>): Promise<Worker> => {
     const createdWorker = await sahaayakService.createWorkerApplication(workerData);
-    setWorkers((prev) => [createdWorker, ...prev]);
+    const freshWorkers = await sahaayakService.getWorkers();
+    setWorkers(freshWorkers);
     return createdWorker;
   };
 
