@@ -18,8 +18,13 @@ export const CustomerSidebar: React.FC = () => {
   const { currentUser, bookings, activeView, setActiveView, activeBooking, openEmergencySOS, t } = useApp();
 
   const customerBookingsCount = currentUser?.id
-    ? bookings.filter((b) => !b.customer_id || b.customer_id === currentUser.id || b.customerName === currentUser.name).length
-    : bookings.length;
+    ? bookings.filter(
+        (b) =>
+          b.customer_id === currentUser.id ||
+          (currentUser.phone && b.customerPhone && b.customerPhone === currentUser.phone) ||
+          (currentUser.name && b.customerName && b.customerName === currentUser.name)
+      ).length
+    : 0;
 
   const initials = currentUser?.name
     ? currentUser.name

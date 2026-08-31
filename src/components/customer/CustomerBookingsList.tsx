@@ -19,10 +19,15 @@ import { ServiceIcon } from '../common/ServiceIcon';
 export const CustomerBookingsList: React.FC = () => {
   const { bookings, currentUser, setActiveBookingById, setActiveView, t } = useApp();
 
-  // Filter bookings for this customer if user is logged in
+  // Filter bookings strictly for this customer if logged in
   const customerBookings = currentUser?.id
-    ? bookings.filter((b) => !b.customer_id || b.customer_id === currentUser.id || b.customerName === currentUser.name)
-    : bookings;
+    ? bookings.filter(
+        (b) =>
+          b.customer_id === currentUser.id ||
+          (currentUser.phone && b.customerPhone && b.customerPhone === currentUser.phone) ||
+          (currentUser.name && b.customerName && b.customerName === currentUser.name)
+      )
+    : [];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">

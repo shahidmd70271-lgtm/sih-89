@@ -37,9 +37,15 @@ interface AppContextType {
   setIsAdminAuthModalOpen: (open: boolean) => void;
   isWorkerAuthModalOpen: boolean;
   setIsWorkerAuthModalOpen: (open: boolean) => void;
+  registerCustomer: (params: {
+    name: string;
+    email: string;
+    password: string;
+  }) => Promise<{ success: boolean; message: string; autoLoggedIn: boolean }>;
   loginAsCustomer: (params: {
-    provider: 'google' | 'phone';
     email?: string;
+    password?: string;
+    provider?: 'google' | 'phone';
     phone?: string;
     name?: string;
     otp?: string;
@@ -452,15 +458,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Auth Operations
+  const registerCustomer = async (params: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; message: string; autoLoggedIn: boolean }> => {
+    const result = await authService.customerSignUp(params);
+    if (result.user) {
+      setCurrentUser(result.user);
+      setCurrentRole('customer');
+      setActiveView('customer-dashboard');
+      return { success: true, message: result.message, autoLoggedIn: true };
+    }
+    return { success: true, message: result.message, autoLoggedIn: false };
+  };
+
   const loginAsCustomer = async (params: {
-    provider: 'google' | 'phone';
     email?: string;
+    password?: string;
+    provider?: 'google' | 'phone';
     phone?: string;
     name?: string;
     otp?: string;
   }): Promise<AuthUser> => {
     let user: AuthUser;
-    if (params.provider === 'google') {
+    if (params.email && params.password) {
+      user = await authService.customerSignIn({
+        email: params.email,
+        password: params.password,
+      });
+    } else if (params.provider === 'google') {
       user = await authService.signInWithGoogle(params.email, params.name);
     } else {
       user = await authService.signInWithPhone(params.phone || '', params.otp || '5842', params.name);
@@ -877,6 +904,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAdminAuthModalOpen,
         isWorkerAuthModalOpen,
         setIsWorkerAuthModalOpen,
+        registerCustomer,
         loginAsCustomer,
         loginAsWorker,
         loginAsAdmin,

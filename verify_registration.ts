@@ -3,7 +3,8 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 
-dotenv.config({ path: path.resolve('./shahid-claud/sih-89/.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;

@@ -37,6 +37,189 @@ export class AuthService implements IAuthService {
   }
 
   // ===================== CUSTOMER AUTHENTICATION =====================
+  async customerSignUp(params: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{ user: AuthUser | null; message: string; requiresEmailConfirmation?: boolean }> {
+    const cleanName = params.name.trim();
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanPass = params.password.trim();
+
+    if (!cleanName) {
+      throw new Error('Please enter your full name.');
+    }
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      throw new Error('Please enter a valid email address.');
+    }
+    if (!cleanPass || cleanPass.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Please check your environment variables.');
+    }
+
+    console.log('[Customer Auth] Registering new customer via Supabase Auth:', { email: cleanEmail, name: cleanName });
+
+    // 1. Register with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: cleanPass,
+      options: {
+        data: {
+          role: 'customer',
+          full_name: cleanName,
+        },
+      },
+    });
+
+    if (authError) {
+      console.error('[Customer Auth] auth.signUp failed:', authError);
+      if (
+        authError.message.toLowerCase().includes('already registered') ||
+        authError.message.toLowerCase().includes('already in use')
+      ) {
+        throw new Error('An account with this email address is already registered. Please login instead.');
+      }
+      throw new Error(`Registration failed: ${authError.message}`);
+    }
+
+    const userId = authData.user?.id;
+    if (!userId) {
+      throw new Error('No user record returned from Supabase Auth.');
+    }
+
+    console.log('[Customer Auth] Customer created in auth.users with ID:', userId);
+
+    // 2. Ensure public.profiles record is created/upserted with role: 'customer'
+    try {
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert(
+          {
+            id: userId,
+            role: 'customer',
+            full_name: cleanName,
+            email: cleanEmail,
+            status: 'active',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+
+      if (profileErr) {
+        console.warn('[Customer Auth] Profiles upsert notice:', profileErr.message);
+      } else {
+        console.log('[Customer Auth] Profile successfully confirmed in public.profiles for ID:', userId);
+      }
+    } catch (err) {
+      console.warn('[Customer Auth] Profiles upsert exception:', err);
+    }
+
+    const session = authData.session;
+    let authUser: AuthUser | null = null;
+    if (session && authData.user) {
+      authUser = {
+        id: userId,
+        name: cleanName,
+        email: cleanEmail,
+        role: 'customer',
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
+        authProvider: 'google',
+        token: session.access_token,
+      };
+      this.saveSession(authUser);
+    }
+
+    return {
+      user: authUser,
+      message: session
+        ? 'Customer account created successfully!'
+        : 'Customer account registered successfully! You can now log in.',
+      requiresEmailConfirmation: !session,
+    };
+  }
+
+  async customerSignIn(params: { email: string; password: string }): Promise<AuthUser> {
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanPass = params.password.trim();
+
+    if (!cleanEmail || !cleanPass) {
+      throw new Error('Please enter both email and password.');
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Please check your environment variables.');
+    }
+
+    console.log('[Customer Auth] Signing in customer via Supabase Auth:', cleanEmail);
+
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPass,
+    });
+
+    if (authError || !authData.user) {
+      console.error('[Customer Auth] signInWithPassword error:', authError);
+      if (authError?.message?.toLowerCase().includes('invalid login credentials')) {
+        throw new Error('Invalid email or password. Please verify your credentials.');
+      }
+      if (authError?.message?.toLowerCase().includes('email not confirmed')) {
+        throw new Error('Email address has not been confirmed yet. Please check your inbox or try again.');
+      }
+      throw new Error(authError?.message || 'Login failed. Please check your credentials.');
+    }
+
+    const userId = authData.user.id;
+
+    // Fetch profile from public.profiles
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileErr) {
+      console.warn('[Customer Auth] Profile fetch notice:', profileErr.message);
+    }
+
+    const fullName = profile?.full_name || authData.user.user_metadata?.full_name || cleanEmail.split('@')[0];
+    const role: UserRole = profile?.role || (authData.user.user_metadata?.role as UserRole) || 'customer';
+
+    // If profile row doesn't exist yet, insert it
+    if (!profile) {
+      try {
+        await supabase.from('profiles').upsert(
+          {
+            id: userId,
+            role: 'customer',
+            full_name: fullName,
+            email: cleanEmail,
+            status: 'active',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+      } catch (err) {
+        console.warn('[Customer Auth] Auto-create profile notice:', err);
+      }
+    }
+
+    const customerUser: AuthUser = {
+      id: userId,
+      name: fullName,
+      email: cleanEmail,
+      role: role,
+      avatar: profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
+      authProvider: 'google',
+      token: authData.session?.access_token || `customer-token-${Date.now()}`,
+    };
+
+    this.saveSession(customerUser);
+    return customerUser;
+  }
+
   async signInWithGoogle(email = 'user@gmail.com', name = 'Customer User'): Promise<AuthUser> {
     if (isSupabaseConfigured && supabase) {
       try {

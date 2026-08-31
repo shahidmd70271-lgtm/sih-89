@@ -158,6 +158,59 @@ export const mapWorkerToDbRow = (w: Worker, authUserId?: string) => {
   };
 };
 
+export const mapDbRowToBooking = (row: any): Booking => {
+  const isEmergency = Boolean(row.is_emergency || row.isEmergency);
+  const otpCode = row.otp || row.otp_code || row.otpCode || '5842';
+  const totalAmount = Number(row.total_amount != null ? row.total_amount : row.totalAmount) || 329;
+  const estimatedPrice = Number(row.estimated_price != null ? row.estimated_price : row.estimatedPrice) || 299;
+  const platformFee = Number(row.platform_fee != null ? row.platform_fee : row.platformFee) || 15;
+  const welfareCess = Number(row.welfare_cess != null ? row.welfare_cess : row.welfareCess) || 15;
+
+  return {
+    id: row.id,
+    customer_id: row.customer_id || row.customerId || undefined,
+    customerName: row.customer_name || row.customerName || 'Customer',
+    customerPhone: row.customer_phone || row.customerPhone || '',
+    customerAddress: row.customer_address || row.customerAddress || 'Local Area',
+    latitude: row.latitude != null ? Number(row.latitude) : undefined,
+    longitude: row.longitude != null ? Number(row.longitude) : undefined,
+    customerCoordinates:
+      row.latitude != null && row.longitude != null
+        ? { lat: Number(row.latitude), lng: Number(row.longitude) }
+        : undefined,
+    worker_id: row.worker_id || row.workerId,
+    workerId: row.worker_id || row.workerId || '',
+    workerName: row.worker_name || row.workerName || 'Trade Worker',
+    workerSkill: (row.service_type || row.worker_skill || row.workerSkill || 'Plumbing') as ServiceType,
+    workerAvatar: row.worker_avatar || row.workerAvatar || 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=400&auto=format&fit=crop&q=80',
+    workerPhone: row.worker_phone || row.workerPhone || '',
+    serviceType: (row.service_type || row.worker_skill || row.workerSkill || 'Plumbing') as ServiceType,
+    date: row.scheduled_date || row.date || row.booking_date || 'Today',
+    booking_date: row.scheduled_date || row.date || row.booking_date || 'Today',
+    start_time: row.start_time || row.startTime,
+    end_time: row.end_time || row.endTime,
+    timeSlot: row.time_slot || row.timeSlot || '10:00 AM – 11:00 AM',
+    slotId: row.slot_id || row.slotId,
+    problemDescription: row.problem_description || row.problemDescription || 'Service requested.',
+    estimatedPrice,
+    platformFee,
+    welfareCess,
+    totalAmount,
+    amount: totalAmount,
+    status: (row.status || 'requested') as BookingStatus,
+    isEmergency,
+    etaMinutes: Number(row.eta_minutes != null ? row.eta_minutes : row.etaMinutes) || 0,
+    createdAt: row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN') : 'Just now',
+    created_at: row.created_at || new Date().toISOString(),
+    otpCode,
+    otp_code: otpCode,
+    otp: otpCode,
+    otp_verified: Boolean(row.otp_verified),
+    otp_verified_at: row.otp_verified_at,
+    paymentStatus: row.payment_status || row.paymentStatus || 'pending',
+  };
+};
+
 export class SahaayakService implements ISahaayakService {
   private workers: Worker[] = [];
   private bookings: Booking[] = [];
@@ -589,12 +642,25 @@ export class SahaayakService implements ISahaayakService {
   async getBookings(): Promise<Booking[]> {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('bookings').select('*');
-        if (!error && data) {
-          return data as Booking[];
+        console.log('[Supabase getBookings] Fetching bookings from Supabase public.bookings table...');
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('[Supabase getBookings] Query failed:', error);
+          throw new Error(`Failed to fetch bookings from Supabase: ${error.message}`);
         }
-      } catch {
-        // fallback
+        if (data) {
+          console.log(`[Supabase getBookings] Retrieved ${data.length} booking records.`);
+          const mapped = data.map(mapDbRowToBooking);
+          this.bookings = mapped;
+          return mapped;
+        }
+      } catch (err: any) {
+        console.error('[Supabase getBookings] Exception during fetch:', err);
+        throw err;
       }
     }
     throw new Error('Supabase is not configured. Please check your environment variables.');
@@ -614,9 +680,14 @@ export class SahaayakService implements ISahaayakService {
     const welfareCess = Math.round(estimatedPrice * 0.05);
     const totalAmount = estimatedPrice + platformFee + welfareCess;
 
+    const validCustomerId =
+      bookingData.customer_id && /^[0-9a-f-]{36}$/i.test(bookingData.customer_id)
+        ? bookingData.customer_id
+        : undefined;
+
     const newBooking: Booking = {
       id: randomId,
-      customer_id: bookingData.customer_id,
+      customer_id: validCustomerId,
       customerName: bookingData.customerName || 'Customer',
       customerPhone: bookingData.customerPhone || '',
       customerAddress: bookingData.customerAddress || 'Customer Address',
@@ -663,7 +734,7 @@ export class SahaayakService implements ISahaayakService {
       await supabase.from('bookings').insert([
         {
           id: newBooking.id,
-          customer_id: newBooking.customer_id,
+          customer_id: validCustomerId || null,
           customer_name: newBooking.customerName,
           customer_phone: newBooking.customerPhone,
           customer_address: newBooking.customerAddress,

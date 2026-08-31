@@ -1,6 +1,12 @@
 import { AuthUser, Booking, CooperativeSociety, Review, ServiceType, Worker, WorkerNotification } from '../types';
 
 export interface IAuthService {
+  customerSignUp(params: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{ user: AuthUser | null; message: string; requiresEmailConfirmation?: boolean }>;
+  customerSignIn(params: { email: string; password: string }): Promise<AuthUser>;
   signInWithGoogle(email?: string, name?: string): Promise<AuthUser>;
   signInWithPhone(phone: string, otp: string, name?: string): Promise<AuthUser>;
   verifyPhoneOtp(phone: string, otp: string): Promise<boolean>;
