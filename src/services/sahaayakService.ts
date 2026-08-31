@@ -12,6 +12,7 @@ import {
 import { COOPERATIVE_SOCIETIES } from '../data/mockData';
 import { ISahaayakService } from './types';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { isValidUuid } from '../utils/uuidUtils';
 
 
 export const mapDbRowToWorker = (row: any): Worker => {
@@ -131,9 +132,12 @@ export const mapDbRowToWorker = (row: any): Worker => {
 };
 
 export const mapWorkerToDbRow = (w: Worker, authUserId?: string) => {
+  const candidateProfileId = authUserId || w.profile_id;
+  const validProfileId = isValidUuid(candidateProfileId) ? candidateProfileId : null;
+
   return {
     id: w.id,
-    profile_id: authUserId || w.profile_id || null,
+    profile_id: validProfileId,
     application_id: w.applicationId || w.id,
     applied_date: w.appliedDate || new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
     name: w.name,
@@ -312,11 +316,13 @@ export class SahaayakService implements ISahaayakService {
   async getWorkerById(id: string): Promise<Worker | null> {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('workers')
-          .select('*')
-          .or(`id.eq.${id},profile_id.eq.${id}`)
-          .maybeSingle();
+        let query = supabase.from('workers').select('*');
+        if (isValidUuid(id)) {
+          query = query.or(`id.eq.${id},profile_id.eq.${id}`);
+        } else {
+          query = query.eq('id', id);
+        }
+        const { data, error } = await query.maybeSingle();
         if (!error && data) {
           return mapDbRowToWorker(data);
         }
@@ -324,7 +330,7 @@ export class SahaayakService implements ISahaayakService {
         // fallback
       }
     }
-    const worker = this.workers.find((w) => w.id === id || w.profile_id === id);
+    const worker = this.workers.find((w) => w.id === id || (isValidUuid(id) && w.profile_id === id));
     return worker ? { ...worker } : null;
   }
 
@@ -339,7 +345,20 @@ export class SahaayakService implements ISahaayakService {
     const cleanEmail = (workerData.email || '').trim().toLowerCase();
     const cleanPass = (workerData.password || '').trim();
     const cleanPhone = (workerData.phone || '').trim();
-    let authUserId = workerData.profile_id || `prof-${Date.now()}`;
+    let authUserId: string | undefined = isValidUuid(workerData.profile_id) ? workerData.profile_id : undefined;
+
+    // If caller is currently authenticated in Supabase, associate their valid UUID
+    if (!authUserId && isSupabaseConfigured && supabase) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && isValidUuid(user.id)) {
+          authUserId = user.id;
+          console.log('[Supabase Worker Registration] Associated authenticated user UUID:', authUserId);
+        }
+      } catch {
+        // non-blocking
+      }
+    }
 
     console.log('[Supabase Worker Registration] Starting registration pipeline:', {
       email: cleanEmail,
@@ -347,6 +366,7 @@ export class SahaayakService implements ISahaayakService {
       skill: workerData.skill,
       isSupabaseConfigured,
       hasSupabaseClient: !!supabase,
+      hasAuthUserId: !!authUserId,
     });
 
     // 1. If Supabase is configured and credentials provided, create real Supabase Auth user
@@ -385,7 +405,7 @@ export class SahaayakService implements ISahaayakService {
               email: cleanEmail,
               password: cleanPass,
             });
-            if (!signInErr && signInData.user) {
+            if (!signInErr && signInData.user && isValidUuid(signInData.user.id)) {
               authUserId = signInData.user.id;
               console.log('[Supabase Worker Registration] Re-authenticated existing user UUID:', authUserId);
             } else {
@@ -400,7 +420,7 @@ export class SahaayakService implements ISahaayakService {
             console.error('[Supabase Worker Registration] auth.signUp failed:', authError);
             throw new Error(`Supabase Auth error: ${authError.message} (${authError.status || (authError as any).code})`);
           }
-        } else if (authData.user) {
+        } else if (authData.user && isValidUuid(authData.user.id)) {
           authUserId = authData.user.id;
         }
         // Note: We rely on the Supabase database trigger 'on_auth_user_created'

@@ -2,6 +2,7 @@ import { AuthUser, Profile, UserRole, Worker } from '../types';
 import { IAuthService } from './types';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { mapDbRowToWorker } from './sahaayakService';
+import { isValidUuid } from '../utils/uuidUtils';
 
 const STORAGE_KEY = 'sahaayak_real_auth_session';
 
@@ -437,11 +438,13 @@ export class AuthService implements IAuthService {
         }
 
         // Query worker profile associated with this user
-        const { data: workerProfile, error: workerErr } = await supabase
-          .from('workers')
-          .select('*')
-          .or(`profile_id.eq.${data.user.id},email.eq.${inputIdentifier},phone.eq.${inputIdentifier}`)
-          .maybeSingle();
+        let workerQuery = supabase.from('workers').select('*');
+        if (data.user?.id && isValidUuid(data.user.id)) {
+          workerQuery = workerQuery.or(`profile_id.eq.${data.user.id},email.eq.${inputIdentifier},phone.eq.${inputIdentifier}`);
+        } else {
+          workerQuery = workerQuery.or(`email.eq.${inputIdentifier},phone.eq.${inputIdentifier}`);
+        }
+        const { data: workerProfile, error: workerErr } = await workerQuery.maybeSingle();
 
         if (workerErr || !workerProfile) {
           throw new Error('No worker registration profile found for this authenticated user.');

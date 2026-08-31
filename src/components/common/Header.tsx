@@ -11,14 +11,17 @@ import {
   PhoneCall,
   Bell,
   LogOut,
-  ChevronDown,
   UserPlus,
   LogIn,
   LayoutDashboard,
+  ChevronDown,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { LanguageCode, UserRole } from '../../types';
-import { WorkerNotificationPanel } from '../worker/WorkerNotificationPanel';
+
+const WorkerNotificationPanel = React.lazy(() =>
+  import('../worker/WorkerNotificationPanel').then((m) => ({ default: m.WorkerNotificationPanel }))
+);
 
 export const Header: React.FC = () => {
   const {
@@ -221,10 +224,14 @@ export const Header: React.FC = () => {
                   )}
                 </button>
 
-                <WorkerNotificationPanel
-                  isOpen={isWorkerNotifPanelOpen}
-                  onClose={() => setIsWorkerNotifPanelOpen(false)}
-                />
+                {isWorkerNotifPanelOpen && (
+                  <React.Suspense fallback={null}>
+                    <WorkerNotificationPanel
+                      isOpen={isWorkerNotifPanelOpen}
+                      onClose={() => setIsWorkerNotifPanelOpen(false)}
+                    />
+                  </React.Suspense>
+                )}
               </div>
             )}
 

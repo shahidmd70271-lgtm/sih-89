@@ -22,6 +22,7 @@ import { sahaayakService, mapDbRowToWorker } from '../services/sahaayakService';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { computeWorkerSlotsForDate, toggleSlotForDate } from '../utils/availabilityUtils';
 import { isBookingActiveForExecution } from '../utils/statusUtils';
+import { isValidUuid } from '../utils/uuidUtils';
 
 interface AppContextType {
   // Auth state
@@ -378,11 +379,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // 1. Check if user is a Worker in public.workers
             try {
-              const { data: workerRow } = await supabase
-                .from('workers')
-                .select('*')
-                .or(`profile_id.eq.${authUserId},email.eq.${data.session.user.email || ''}`)
-                .maybeSingle();
+              let workerQuery = supabase.from('workers').select('*');
+              if (isValidUuid(authUserId)) {
+                if (data.session.user.email) {
+                  workerQuery = workerQuery.or(`profile_id.eq.${authUserId},email.eq.${data.session.user.email}`);
+                } else {
+                  workerQuery = workerQuery.eq('profile_id', authUserId);
+                }
+              } else if (data.session.user.email) {
+                workerQuery = workerQuery.eq('email', data.session.user.email);
+              }
+              const { data: workerRow } = await workerQuery.maybeSingle();
 
               if (workerRow && mounted) {
                 const mappedWorker = mapDbRowToWorker(workerRow);

@@ -1,51 +1,54 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { HardHat, Building2 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
+import { LoadingFallback } from './components/common/LoadingFallback';
 
-// Auth Modals
-import { CustomerAuthModal } from './components/auth/CustomerAuthModal';
-import { AdminAuthModal } from './components/auth/AdminAuthModal';
-import { WorkerAuthModal } from './components/auth/WorkerAuthModal';
-
-// Landing Page Components
+// Landing Page Components (Eagerly loaded for instantaneous first paint)
 import { HeroSection } from './components/landing/HeroSection';
 import { PopularServicesSection } from './components/landing/PopularServicesSection';
 import { WhySahaayakSection } from './components/landing/WhySahaayakSection';
 
-// Customer Components
-import { CustomerSidebar } from './components/customer/CustomerSidebar';
-import { CustomerDashboardOverview } from './components/customer/CustomerDashboardOverview';
-import { ServiceSearchCatalog } from './components/customer/ServiceSearchCatalog';
-import { CustomerBookingsList } from './components/customer/CustomerBookingsList';
-import { CustomerProfileView } from './components/customer/CustomerProfileView';
-import { CustomerMessagesView } from './components/customer/CustomerMessagesView';
-import { CustomerPaymentsView } from './components/customer/CustomerPaymentsView';
-import { WorkerProfileModal } from './components/customer/WorkerProfileModal';
-import { BookingModal } from './components/customer/BookingModal';
-import { EmergencyBookingModal } from './components/customer/EmergencyBookingModal';
-import { MessagesModal } from './components/customer/MessagesModal';
-import { CallModal } from './components/customer/CallModal';
+// Auth Modals (Lazy Loaded on Demand)
+const CustomerAuthModal = lazy(() => import('./components/auth/CustomerAuthModal').then(m => ({ default: m.CustomerAuthModal })));
+const AdminAuthModal = lazy(() => import('./components/auth/AdminAuthModal').then(m => ({ default: m.AdminAuthModal })));
+const WorkerAuthModal = lazy(() => import('./components/auth/WorkerAuthModal').then(m => ({ default: m.WorkerAuthModal })));
 
-// Worker Components
-import { WorkerSidebar } from './components/worker/WorkerSidebar';
-import { WorkerDashboardOverview } from './components/worker/WorkerDashboardOverview';
-import { WorkerJobsView } from './components/worker/WorkerJobsView';
-import { WorkerScheduleView } from './components/worker/WorkerScheduleView';
-import { WorkerActiveJobTracker } from './components/worker/WorkerActiveJobTracker';
-import { WorkerEarningsSection } from './components/worker/WorkerEarningsSection';
-import { WorkerWelfareSection } from './components/worker/WorkerWelfareSection';
-import { WorkerProfileView } from './components/worker/WorkerProfileView';
-import { WorkerJoinModal } from './components/worker/WorkerJoinModal';
+// Customer Components (Lazy Loaded on Demand)
+const CustomerSidebar = lazy(() => import('./components/customer/CustomerSidebar').then(m => ({ default: m.CustomerSidebar })));
+const CustomerDashboardOverview = lazy(() => import('./components/customer/CustomerDashboardOverview').then(m => ({ default: m.CustomerDashboardOverview })));
+const ServiceSearchCatalog = lazy(() => import('./components/customer/ServiceSearchCatalog').then(m => ({ default: m.ServiceSearchCatalog })));
+const CustomerBookingsList = lazy(() => import('./components/customer/CustomerBookingsList').then(m => ({ default: m.CustomerBookingsList })));
+const CustomerProfileView = lazy(() => import('./components/customer/CustomerProfileView').then(m => ({ default: m.CustomerProfileView })));
+const CustomerMessagesView = lazy(() => import('./components/customer/CustomerMessagesView').then(m => ({ default: m.CustomerMessagesView })));
+const CustomerPaymentsView = lazy(() => import('./components/customer/CustomerPaymentsView').then(m => ({ default: m.CustomerPaymentsView })));
 
-// Admin Components
-import { AdminSidebar } from './components/admin/AdminSidebar';
-import { AdminDashboardOverview } from './components/admin/AdminDashboardOverview';
-import { AdminVerificationQueue } from './components/admin/AdminVerificationQueue';
-import { AdminCooperativeSocieties } from './components/admin/AdminCooperativeSocieties';
-import { AdminAnalyticsView } from './components/admin/AdminAnalyticsView';
-import { AdminAIDemandForecast } from './components/admin/AdminAIDemandForecast';
+// Interactive Customer Modals (Lazy Loaded on Demand)
+const WorkerProfileModal = lazy(() => import('./components/customer/WorkerProfileModal').then(m => ({ default: m.WorkerProfileModal })));
+const BookingModal = lazy(() => import('./components/customer/BookingModal').then(m => ({ default: m.BookingModal })));
+const EmergencyBookingModal = lazy(() => import('./components/customer/EmergencyBookingModal').then(m => ({ default: m.EmergencyBookingModal })));
+const MessagesModal = lazy(() => import('./components/customer/MessagesModal').then(m => ({ default: m.MessagesModal })));
+const CallModal = lazy(() => import('./components/customer/CallModal').then(m => ({ default: m.CallModal })));
+
+// Worker Components (Lazy Loaded on Demand)
+const WorkerSidebar = lazy(() => import('./components/worker/WorkerSidebar').then(m => ({ default: m.WorkerSidebar })));
+const WorkerDashboardOverview = lazy(() => import('./components/worker/WorkerDashboardOverview').then(m => ({ default: m.WorkerDashboardOverview })));
+const WorkerJobsView = lazy(() => import('./components/worker/WorkerJobsView').then(m => ({ default: m.WorkerJobsView })));
+const WorkerScheduleView = lazy(() => import('./components/worker/WorkerScheduleView').then(m => ({ default: m.WorkerScheduleView })));
+const WorkerActiveJobTracker = lazy(() => import('./components/worker/WorkerActiveJobTracker').then(m => ({ default: m.WorkerActiveJobTracker })));
+const WorkerEarningsSection = lazy(() => import('./components/worker/WorkerEarningsSection').then(m => ({ default: m.WorkerEarningsSection })));
+const WorkerWelfareSection = lazy(() => import('./components/worker/WorkerWelfareSection').then(m => ({ default: m.WorkerWelfareSection })));
+const WorkerProfileView = lazy(() => import('./components/worker/WorkerProfileView').then(m => ({ default: m.WorkerProfileView })));
+const WorkerJoinModal = lazy(() => import('./components/worker/WorkerJoinModal').then(m => ({ default: m.WorkerJoinModal })));
+
+// Admin Components (Lazy Loaded on Demand)
+const AdminSidebar = lazy(() => import('./components/admin/AdminSidebar').then(m => ({ default: m.AdminSidebar })));
+const AdminDashboardOverview = lazy(() => import('./components/admin/AdminDashboardOverview').then(m => ({ default: m.AdminDashboardOverview })));
+const AdminVerificationQueue = lazy(() => import('./components/admin/AdminVerificationQueue').then(m => ({ default: m.AdminVerificationQueue })));
+const AdminCooperativeSocieties = lazy(() => import('./components/admin/AdminCooperativeSocieties').then(m => ({ default: m.AdminCooperativeSocieties })));
+const AdminAnalyticsView = lazy(() => import('./components/admin/AdminAnalyticsView').then(m => ({ default: m.AdminAnalyticsView })));
+const AdminAIDemandForecast = lazy(() => import('./components/admin/AdminAIDemandForecast').then(m => ({ default: m.AdminAIDemandForecast })));
 
 function AppContent() {
   const {
@@ -141,21 +144,23 @@ function AppContent() {
       {/* Main Content Area */}
       <main className="flex-1">
         {activeView === 'landing' ? (
-          /* LANDING PAGE */
+          /* LANDING PAGE (Immediate Render) */
           <div>
             <HeroSection />
             <PopularServicesSection />
             <WhySahaayakSection />
           </div>
         ) : activeView.startsWith('admin-') || currentRole === 'admin' ? (
-          /* ADMIN DASHBOARD WITH SIDEBAR (Protected) */
+          /* ADMIN DASHBOARD WITH SIDEBAR (Protected & Lazy Loaded) */
           isAuthorizedAdmin ? (
-            <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
-              <AdminSidebar />
-              <div className="flex-1 overflow-y-auto bg-slate-50">
-                {renderAdminView()}
+            <Suspense fallback={<LoadingFallback message="Loading Administration Portal..." />}>
+              <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
+                <AdminSidebar />
+                <div className="flex-1 overflow-y-auto bg-slate-50">
+                  {renderAdminView()}
+                </div>
               </div>
-            </div>
+            </Suspense>
           ) : (
             <div className="p-8 max-w-lg mx-auto my-16 bg-white rounded-3xl border border-red-200 shadow-xl text-center space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center mx-auto">
@@ -176,14 +181,16 @@ function AppContent() {
             </div>
           )
         ) : activeView.startsWith('worker-') || currentRole === 'worker' ? (
-          /* WORKER DASHBOARD WITH SIDEBAR (Protected) */
+          /* WORKER DASHBOARD WITH SIDEBAR (Protected & Lazy Loaded) */
           isAuthorizedWorker ? (
-            <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
-              <WorkerSidebar />
-              <div className="flex-1 overflow-y-auto bg-slate-50">
-                {renderWorkerView()}
+            <Suspense fallback={<LoadingFallback message="Loading Labour Cooperative Worker Desk..." />}>
+              <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
+                <WorkerSidebar />
+                <div className="flex-1 overflow-y-auto bg-slate-50">
+                  {renderWorkerView()}
+                </div>
               </div>
-            </div>
+            </Suspense>
           ) : (
             <div className="p-8 max-w-lg mx-auto my-16 bg-white rounded-3xl border border-amber-200 shadow-xl text-center space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
@@ -210,40 +217,52 @@ function AppContent() {
             </div>
           )
         ) : (
-          /* CUSTOMER DASHBOARD WITH SIDEBAR */
-          <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
-            <CustomerSidebar />
-            <div className="flex-1 overflow-y-auto">
-              {renderCustomerView()}
+          /* CUSTOMER DASHBOARD WITH SIDEBAR (Lazy Loaded) */
+          <Suspense fallback={<LoadingFallback message="Loading Citizen Services..." />}>
+            <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
+              <CustomerSidebar />
+              <div className="flex-1 overflow-y-auto">
+                {renderCustomerView()}
+              </div>
             </div>
-          </div>
+          </Suspense>
         )}
       </main>
 
-      {/* Role-Based Authentication & Registration Modals */}
-      <CustomerAuthModal
-        isOpen={isCustomerAuthModalOpen}
-        onClose={() => setIsCustomerAuthModalOpen(false)}
-      />
-      <AdminAuthModal
-        isOpen={isAdminAuthModalOpen}
-        onClose={() => setIsAdminAuthModalOpen(false)}
-      />
-      <WorkerAuthModal
-        isOpen={isWorkerAuthModalOpen}
-        onClose={() => setIsWorkerAuthModalOpen(false)}
-      />
+      {/* Role-Based Authentication & Registration Modals (Lazy Loaded) */}
+      <Suspense fallback={null}>
+        {isCustomerAuthModalOpen && (
+          <CustomerAuthModal
+            isOpen={isCustomerAuthModalOpen}
+            onClose={() => setIsCustomerAuthModalOpen(false)}
+          />
+        )}
+        {isAdminAuthModalOpen && (
+          <AdminAuthModal
+            isOpen={isAdminAuthModalOpen}
+            onClose={() => setIsAdminAuthModalOpen(false)}
+          />
+        )}
+        {isWorkerAuthModalOpen && (
+          <WorkerAuthModal
+            isOpen={isWorkerAuthModalOpen}
+            onClose={() => setIsWorkerAuthModalOpen(false)}
+          />
+        )}
+        {isWorkerJoinModalOpen && (
+          <WorkerJoinModal
+            isOpen={isWorkerJoinModalOpen}
+            onClose={() => setIsWorkerJoinModalOpen(false)}
+          />
+        )}
 
-      {/* Global Interactive Modals */}
-      <WorkerProfileModal />
-      <BookingModal />
-      <EmergencyBookingModal />
-      <MessagesModal />
-      <CallModal />
-      <WorkerJoinModal
-        isOpen={isWorkerJoinModalOpen}
-        onClose={() => setIsWorkerJoinModalOpen(false)}
-      />
+        {/* Global Interactive Modals */}
+        <WorkerProfileModal />
+        <BookingModal />
+        <EmergencyBookingModal />
+        <MessagesModal />
+        <CallModal />
+      </Suspense>
 
       {/* Universal Footer */}
       <Footer />
