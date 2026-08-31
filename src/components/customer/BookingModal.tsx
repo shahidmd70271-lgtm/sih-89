@@ -102,15 +102,18 @@ export const BookingModal: React.FC = () => {
       return;
     }
 
+    const finalLat = coordinates?.lat || 28.5700;
+    const finalLng = coordinates?.lng || 77.2200;
+
     const created = await createNewBooking({
       workerId: selectedWorker.id,
       date: formattedDate,
       timeSlot: selectedSlot.label,
       slotId: selectedSlot.id,
       customerAddress: address.trim(),
-      latitude: coordinates?.lat,
-      longitude: coordinates?.lng,
-      customerCoordinates: coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : undefined,
+      latitude: finalLat,
+      longitude: finalLng,
+      customerCoordinates: { lat: finalLat, lng: finalLng },
       problemDescription: problemDescription || `General service for ${selectedWorker.skill}`,
       estimatedPrice: basePrice,
       platformFee,

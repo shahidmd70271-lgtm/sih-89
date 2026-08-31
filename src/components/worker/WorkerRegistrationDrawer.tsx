@@ -478,6 +478,23 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
       const coopObj = coopList.find((c) => c.name === cooperativeName) || coopList[0];
       const approxLocation = `${streetLocality ? streetLocality + ', ' : ''}${cityTown}, ${stateName}`;
 
+      let workerLat = 28.5700;
+      let workerLng = 77.2200;
+      const lowerCity = (cityTown + ' ' + district + ' ' + stateName).toLowerCase();
+      if (lowerCity.includes('gurugram') || lowerCity.includes('gurgaon')) {
+        workerLat = 28.4595;
+        workerLng = 77.0266;
+      } else if (lowerCity.includes('noida')) {
+        workerLat = 28.5708;
+        workerLng = 77.3271;
+      } else if (lowerCity.includes('dwarka')) {
+        workerLat = 28.5921;
+        workerLng = 77.0460;
+      } else if (lowerCity.includes('saket') || lowerCity.includes('south')) {
+        workerLat = 28.5245;
+        workerLng = 77.2177;
+      }
+
       const createdWorker = await addNewWorker({
         name: fullName.trim() || 'Worker Applicant',
         avatar: avatarUrl,
@@ -488,6 +505,8 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
         cooperativeId: coopObj.id,
         cooperativeName: coopObj.name,
         location: approxLocation,
+        latitude: workerLat,
+        longitude: workerLng,
         phone: mobileNumber.startsWith('+91') ? mobileNumber : `+91 ${mobileNumber}`,
         bio,
         languages,
