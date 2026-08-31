@@ -306,6 +306,8 @@ export interface Payment {
   worker_net?: number;
   extra_parts_amount?: number;
   payment_method: PaymentMode;
+  payment_mode?: PaymentMode;
+  paymentMode?: PaymentMode;
   payment_status: 'pending' | 'paid';
   paid_at?: string;
   created_at: string;

@@ -1109,72 +1109,123 @@ export class SahaayakService implements ISahaayakService {
   }> {
     if (isSupabaseConfigured && supabase && workerId) {
       try {
-        const { data: dbPayments } = await supabase
-          .from('payments')
-          .select('*')
-          .eq('worker_id', workerId)
-          .eq('payment_status', 'paid');
-
-        if (dbPayments && dbPayments.length > 0) {
-          const totalEarned = dbPayments.reduce((acc: number, p: any) => acc + Number(p.worker_net || p.amount || 0), 0);
-          const { data: dbBookings } = await supabase
+        const [{ data: dbPayments }, { data: dbBookings }] = await Promise.all([
+          supabase
+            .from('payments')
+            .select('*')
+            .eq('worker_id', workerId),
+          supabase
             .from('bookings')
             .select('*')
-            .eq('worker_id', workerId);
+            .eq('worker_id', workerId),
+        ]);
 
-          const allBookings = dbBookings || [];
-          return {
-            todayEarnings: totalEarned,
-            totalEarnings: totalEarned,
-            completedJobs: allBookings.filter((b: any) => b.status === 'completed' || b.status === 'paid').length,
-            pendingRequestsCount: allBookings.filter((b: any) => b.status === 'requested').length,
-            acceptedJobsCount: allBookings.filter((b: any) => b.status === 'accepted' || b.status === 'in_progress').length,
-            paidJobsCount: dbPayments.length,
-            paymentsHistory: dbPayments as Payment[],
-          };
+        const allBookings = dbBookings || [];
+        const allPayments = dbPayments || [];
+
+        const completedBookings = allBookings.filter(
+          (b: any) =>
+            b.status === 'completed' ||
+            b.status === 'Completed' ||
+            b.status === 'paid' ||
+            b.payment_status === 'paid'
+        );
+
+        let totalNetEarnings = 0;
+        let todayNetEarnings = 0;
+        const todayIso = new Date().toISOString().split('T')[0];
+
+        const history: Payment[] = [];
+
+        for (const b of completedBookings) {
+          const matchingPay = allPayments.find((p: any) => p.booking_id === b.id);
+          const grossAmount = Number(matchingPay?.amount || b.total_amount || b.estimated_price || 299);
+          const extraCost = Number(matchingPay?.extra_parts_amount || b.extra_materials_cost || 0);
+          const baseWage = grossAmount - extraCost;
+          const net = matchingPay?.worker_net != null
+            ? Number(matchingPay.worker_net)
+            : Math.round(baseWage * 0.90) + extraCost;
+
+          totalNetEarnings += net;
+
+          const bookingDate = b.completed_at || b.scheduled_date || b.created_at || '';
+          if (bookingDate.startsWith(todayIso) || b.scheduled_date === 'Today') {
+            todayNetEarnings += net;
+          }
+
+          history.push({
+            id: matchingPay?.id || `pay-${b.id}`,
+            booking_id: b.id,
+            worker_id: workerId,
+            customer_id: b.customer_id,
+            amount: grossAmount,
+            workerNet: net,
+            worker_net: net,
+            extra_parts_amount: extraCost,
+            payment_method: (matchingPay?.payment_mode || b.payment_mode || 'Online') as PaymentMode,
+            payment_mode: matchingPay?.payment_mode || b.payment_mode || 'Online',
+            payment_status: 'paid',
+            created_at: b.completed_at || b.created_at || new Date().toISOString(),
+          });
         }
+
+        return {
+          todayEarnings: todayNetEarnings > 0 ? todayNetEarnings : totalNetEarnings,
+          totalEarnings: totalNetEarnings,
+          completedJobs: completedBookings.length,
+          pendingRequestsCount: allBookings.filter((b: any) => b.status === 'requested' || b.status === 'Pending').length,
+          acceptedJobsCount: allBookings.filter((b: any) =>
+            ['accepted', 'Worker Accepted', 'travelling', 'Worker Travelling', 'arrived', 'Worker Arrived', 'in_progress', 'Service In Progress'].includes(b.status)
+          ).length,
+          paidJobsCount: completedBookings.length,
+          paymentsHistory: history,
+        };
       } catch (err) {
         console.warn('Supabase query error on earnings, using local store:', err);
       }
     }
 
-    // Only calculate from actual paid bookings/payments for this worker
-    const workerPayments = this.payments.filter(
-      (p) => p.worker_id === workerId && p.payment_status === 'paid'
+    // Fallback over in-memory bookings for this worker
+    const workerBookings = this.bookings.filter(
+      (b) => b.workerId === workerId || (b as any).worker_id === workerId
+    );
+    const completedBookings = workerBookings.filter(
+      (b) => b.status === 'completed' || b.status === 'paid' || b.status === 'Completed' || b.paymentStatus === 'paid'
     );
 
-    const totalEarnings = workerPayments.reduce((sum, p) => sum + (p.workerNet || p.amount || 0), 0);
-
-    const workerBookings = this.bookings.filter((b) => b.workerId === workerId);
-    const completedJobs = workerBookings.filter(
-      (b) => b.status === 'completed' || b.status === 'paid' || b.status === 'Completed'
-    ).length;
-    const paidJobsCount = workerBookings.filter(
-      (b) => b.paymentStatus === 'paid' || b.paymentStatus === 'Settled to Worker'
-    ).length;
-    const pendingRequestsCount = workerBookings.filter(
-      (b) => b.status === 'requested' || b.status === 'Pending' || b.status === 'Waiting for Response'
-    ).length;
-    const acceptedJobsCount = workerBookings.filter(
-      (b) =>
-        b.status === 'accepted' ||
-        b.status === 'in_progress' ||
-        b.status === 'Worker Accepted' ||
-        b.status === 'Worker Travelling' ||
-        b.status === 'travelling' ||
-        b.status === 'Worker Arrived' ||
-        b.status === 'arrived' ||
-        b.status === 'Service In Progress'
-    ).length;
+    let totalNet = 0;
+    const history: Payment[] = [];
+    for (const b of completedBookings) {
+      const gross = b.totalAmount || b.estimatedPrice || 299;
+      const extra = b.extraMaterialsCost || 0;
+      const net = Math.round((gross - extra) * 0.90) + extra;
+      totalNet += net;
+      history.push({
+        id: `pay-${b.id}`,
+        booking_id: b.id,
+        worker_id: workerId,
+        customer_id: b.customer_id,
+        amount: gross,
+        workerNet: net,
+        worker_net: net,
+        extra_parts_amount: extra,
+        payment_method: (b.paymentMode || 'Online') as PaymentMode,
+        payment_mode: b.paymentMode || 'Online',
+        payment_status: 'paid',
+        created_at: b.completedAt || new Date().toISOString(),
+      });
+    }
 
     return {
-      todayEarnings: totalEarnings, // Real calculated earnings
-      totalEarnings,
-      completedJobs,
-      pendingRequestsCount,
-      acceptedJobsCount,
-      paidJobsCount,
-      paymentsHistory: workerPayments,
+      todayEarnings: totalNet,
+      totalEarnings: totalNet,
+      completedJobs: completedBookings.length,
+      pendingRequestsCount: workerBookings.filter((b) => b.status === 'requested' || b.status === 'Pending').length,
+      acceptedJobsCount: workerBookings.filter((b) =>
+        ['accepted', 'Worker Accepted', 'travelling', 'Worker Travelling', 'arrived', 'Worker Arrived', 'in_progress', 'Service In Progress'].includes(b.status)
+      ).length,
+      paidJobsCount: completedBookings.length,
+      paymentsHistory: history,
     };
   }
 

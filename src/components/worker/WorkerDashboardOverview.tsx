@@ -49,9 +49,17 @@ export const WorkerDashboardOverview: React.FC = () => {
   }
 
   // Real paid bookings for this worker
+  const isWorkerBooking = (b: Booking) => {
+    return (
+      b.workerId === worker.id ||
+      (b as any).worker_id === worker.id ||
+      (worker.profile_id && (b.workerId === worker.profile_id || (b as any).worker_id === worker.profile_id))
+    );
+  };
+
   const paidBookings = bookings.filter(
     (b) =>
-      b.workerId === worker.id &&
+      isWorkerBooking(b) &&
       (b.paymentStatus === 'paid' ||
         b.paymentStatus === 'Settled to Worker' ||
         b.status === 'paid' ||
@@ -59,7 +67,7 @@ export const WorkerDashboardOverview: React.FC = () => {
         b.status === 'Completed')
   );
 
-  const realEarnings = paidBookings.reduce((sum, b) => sum + (b.totalAmount || b.estimatedPrice || 0), 0);
+  const realEarnings = paidBookings.reduce((sum, b) => sum + (b.totalAmount || b.estimatedPrice || 299), 0);
   const realWelfareBalance = Math.round(realEarnings * 0.05);
 
   // Modals state

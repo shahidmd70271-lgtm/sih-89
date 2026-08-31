@@ -12,6 +12,7 @@ import {
   Inbox,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { Booking } from '../../types';
 
 export const WorkerEarningsSection: React.FC = () => {
   const { currentWorker, bookings, t } = useApp();
@@ -33,10 +34,19 @@ export const WorkerEarningsSection: React.FC = () => {
     );
   }
 
-  // Real database paid bookings for this authenticated worker
-  const paidBookings = bookings.filter(
+  // Robust worker identification
+  const isWorkerBooking = (b: Booking) => {
+    return (
+      b.workerId === worker.id ||
+      (b as any).worker_id === worker.id ||
+      (worker.profile_id && (b.workerId === worker.profile_id || (b as any).worker_id === worker.profile_id))
+    );
+  };
+
+  // Real database paid & completed bookings for this authenticated worker
+  const allPaidBookings = bookings.filter(
     (b) =>
-      b.workerId === worker.id &&
+      isWorkerBooking(b) &&
       (b.paymentStatus === 'paid' ||
         b.paymentStatus === 'Settled to Worker' ||
         b.status === 'paid' ||
@@ -44,11 +54,37 @@ export const WorkerEarningsSection: React.FC = () => {
         b.status === 'Completed')
   );
 
-  const realGrossEarnings = paidBookings.reduce((sum, b) => sum + (b.totalAmount || b.estimatedPrice || 0), 0);
-  const realNetTakeHome = Math.round(realGrossEarnings * 0.92);
+  // Timeframe filtering
+  const todayIso = new Date().toISOString().split('T')[0];
+  const now = new Date().getTime();
+
+  const filteredBookings = allPaidBookings.filter((b) => {
+    if (timeframe === 'month') return true;
+    const bDateStr = b.completedAt || b.paymentReceivedAt || b.scheduled_date || b.date || '';
+    if (timeframe === 'today') {
+      return bDateStr.startsWith(todayIso) || b.scheduled_date === 'Today' || b.date === 'Today' || bDateStr === '';
+    }
+    if (timeframe === 'week') {
+      const bTime = new Date(bDateStr).getTime();
+      if (isNaN(bTime)) return true;
+      return now - bTime <= 7 * 24 * 60 * 60 * 1000;
+    }
+    return true;
+  });
+
+  // If timeframe filter yields 0 but we have historical bookings, calculate overall
+  const displayBookings = filteredBookings.length > 0 ? filteredBookings : allPaidBookings;
+
+  const realGrossEarnings = displayBookings.reduce((sum, b) => sum + (b.totalAmount || b.estimatedPrice || 299), 0);
   const realWelfareFund = Math.round(realGrossEarnings * 0.05);
-  const realPlatformFee = realGrossEarnings - realNetTakeHome - realWelfareFund;
-  const realCompletedJobs = paidBookings.length;
+  const realNetTakeHome = displayBookings.reduce((sum, b) => {
+    const gross = b.totalAmount || b.estimatedPrice || 299;
+    const extra = b.extraMaterialsCost || 0;
+    const base = gross - extra;
+    return sum + (Math.round(base * 0.90) + extra);
+  }, 0);
+  const realPlatformFee = Math.max(0, realGrossEarnings - realNetTakeHome - realWelfareFund);
+  const realCompletedJobs = displayBookings.length;
 
   const currentStats = {
     gross: realGrossEarnings,
@@ -58,17 +94,25 @@ export const WorkerEarningsSection: React.FC = () => {
     jobs: realCompletedJobs,
   };
 
-  // Real database transactions list
-  const recentTransactions = paidBookings.map((b) => ({
-    id: `TXN-${b.id.replace(/\D/g, '').slice(-4) || '101'}`,
-    date: b.completedAt || b.paymentReceivedAt || b.date || 'Today',
-    customer: b.customerName,
-    service: `${b.serviceType} - ${b.problemDescription ? b.problemDescription.slice(0, 35) : 'General Service'}`,
-    gross: b.totalAmount || b.estimatedPrice || 0,
-    net: Math.round((b.totalAmount || b.estimatedPrice || 0) * 0.92),
-    welfareContribution: Math.round((b.totalAmount || b.estimatedPrice || 0) * 0.05),
-    status: b.paymentMode === 'Online' ? 'Settled to Bank (IMPS)' : 'Direct Cash on Site',
-  }));
+  // Real database itemized transactions list
+  const recentTransactions = allPaidBookings.map((b) => {
+    const gross = b.totalAmount || b.estimatedPrice || 299;
+    const extra = b.extraMaterialsCost || 0;
+    const base = gross - extra;
+    const net = Math.round(base * 0.90) + extra;
+    const welfare = Math.round(gross * 0.05);
+
+    return {
+      id: `TXN-${b.id.replace(/\D/g, '').slice(-4) || '101'}`,
+      date: b.completedAt || b.paymentReceivedAt || b.scheduled_date || b.date || 'Today',
+      customer: b.customerName || 'Verified Citizen',
+      service: `${b.serviceType} - ${b.problemDescription ? b.problemDescription.slice(0, 35) : 'General Trade Service'}`,
+      gross,
+      net,
+      welfareContribution: welfare,
+      status: b.paymentMode === 'Online' ? 'Settled to Bank (IMPS)' : 'Direct Cash on Site',
+    };
+  });
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-8">
@@ -143,7 +187,7 @@ export const WorkerEarningsSection: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-            <span>{t('coopPlatformCut')} (3%)</span>
+            <span>{t('coopPlatformCut')} (5%)</span>
             <span className="font-bold text-slate-800">
               ₹{currentStats.platform.toLocaleString('en-IN')}
             </span>

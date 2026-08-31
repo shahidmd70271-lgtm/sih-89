@@ -52,33 +52,39 @@ export const WorkerActiveJobTracker: React.FC = () => {
     }
   }, []);
 
-  if (!activeBooking) {
-    return (
-      <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
-        <Navigation className="w-12 h-12 text-slate-400 mx-auto" />
-        <h3 className="text-lg font-bold text-slate-900">{t('noActiveJobProgress')}</h3>
-        <p className="text-xs text-slate-500">
-          {t('noActiveJobProgressSub')}
-        </p>
-        <button
-          onClick={() => setActiveView('worker-dashboard')}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer"
-        >
-          {t('goToJobQueue')}
-        </button>
-      </div>
-    );
-  }
-
   // Explicit Workflow State Machine:
   // accepted -> travelling -> arrived -> in_progress -> completed
-  const normalizedStatus = normalizeBookingStatus(activeBooking.status);
+  const normalizedStatus = activeBooking ? normalizeBookingStatus(activeBooking.status) : 'completed';
 
   const isAccepted = normalizedStatus === 'accepted';
   const isTravelling = normalizedStatus === 'travelling';
   const isArrived = normalizedStatus === 'arrived';
   const isInProgress = normalizedStatus === 'in_progress';
   const isCompleted = normalizedStatus === 'completed' || normalizedStatus === 'paid';
+
+  if (!activeBooking || isCompleted) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4 font-sans">
+        <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+          <Navigation className="w-8 h-8" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-slate-900">No accepted jobs currently</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+            You don't have any active service assignments right now. New accepted jobs will appear here automatically.
+          </p>
+        </div>
+        <div className="pt-2">
+          <button
+            onClick={() => setActiveView('worker-dashboard')}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer inline-flex items-center gap-2"
+          >
+            <span>Go to Job Queue</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Step completion indicators
   const isStep1Done = isArrived || isInProgress || isCompleted;

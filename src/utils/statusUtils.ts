@@ -14,3 +14,13 @@ export function normalizeBookingStatus(rawStatus?: string): BookingStatus {
   if (s === 'requested' || s === 'pending' || s === 'waiting_for_response') return 'requested';
   return rawStatus as BookingStatus;
 }
+
+/**
+ * Checks whether a booking is in an active execution state requiring worker action.
+ * Excludes finished (completed, paid) and cancelled/rejected bookings.
+ */
+export function isBookingActiveForExecution(rawStatus?: string): boolean {
+  if (!rawStatus) return false;
+  const normalized = normalizeBookingStatus(rawStatus);
+  return ['accepted', 'travelling', 'arrived', 'in_progress'].includes(normalized);
+}

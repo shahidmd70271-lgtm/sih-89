@@ -21,6 +21,7 @@ import { authService } from '../services/authService';
 import { sahaayakService } from '../services/sahaayakService';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { computeWorkerSlotsForDate, toggleSlotForDate } from '../utils/availabilityUtils';
+import { isBookingActiveForExecution } from '../utils/statusUtils';
 
 interface AppContextType {
   // Auth state
@@ -384,8 +385,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setBookings(dbBookings);
         setCooperatives(dbCoops);
         setReviews(dbReviews);
-        if (dbBookings.length > 0) {
-          setActiveBookingId(dbBookings[0].id);
+        const initialActive = dbBookings.find((b) => isBookingActiveForExecution(b.status));
+        if (initialActive) {
+          setActiveBookingId(initialActive.id);
+        } else {
+          setActiveBookingId(null);
         }
       } catch (err) {
         console.error('[AppContext] Global load error:', err);
@@ -476,23 +480,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : null) ||
     null;
 
-  const activeBooking =
-    (activeBookingId ? bookings.find((b) => b.id === activeBookingId) || null : null) ||
-    (currentWorker
-      ? bookings.find(
-          (b) =>
-            (b.workerId === currentWorker.id || b.worker_id === currentWorker.id) &&
-            ['accepted', 'travelling', 'arrived', 'in_progress'].includes(b.status)
-        ) || null
-      : null) ||
-    (currentUser?.role === 'customer'
-      ? bookings.find(
-          (b) =>
-            (b.customer_id === currentUser.id || b.customerName === currentUser.name) &&
-            ['requested', 'accepted', 'travelling', 'arrived', 'in_progress'].includes(b.status)
-        ) || null
-      : null) ||
-    (bookings.length > 0 ? bookings[0] : null);
+  const activeBooking = (() => {
+    // If activeBookingId is set, verify that it is actually active
+    if (activeBookingId) {
+      const b = bookings.find((bk) => bk.id === activeBookingId);
+      if (b && isBookingActiveForExecution(b.status)) {
+        return b;
+      }
+    }
+
+    // If current user is a worker, find the worker's active booking
+    if (currentWorker) {
+      const workerActive = bookings.find((b) => {
+        const isMatch =
+          b.workerId === currentWorker.id ||
+          (b as any).worker_id === currentWorker.id ||
+          (currentWorker.profile_id &&
+            (b.workerId === currentWorker.profile_id || (b as any).worker_id === currentWorker.profile_id));
+        return isMatch && isBookingActiveForExecution(b.status);
+      });
+      return workerActive || null;
+    }
+
+    // If current user is a customer, find their active ongoing booking
+    if (currentUser?.role === 'customer') {
+      const customerActive = bookings.find((b) => {
+        const isMatch = b.customer_id === currentUser.id || b.customerName === currentUser.name;
+        return isMatch && (b.status === 'requested' || isBookingActiveForExecution(b.status));
+      });
+      return customerActive || null;
+    }
+
+    return null;
+  })();
 
   const unreadNotificationsCount = workerNotifications.filter((n) => !n.isRead).length;
 
