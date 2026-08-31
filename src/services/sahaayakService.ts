@@ -265,8 +265,8 @@ export class SahaayakService implements ISahaayakService {
         console.log('[Supabase getWorkers] Fetching workers from Supabase public.workers table...');
         const { data, error } = await supabase.from('workers').select('*').order('created_at', { ascending: false });
         if (error) {
-          console.error('[Supabase getWorkers] Query failed:', error);
-          throw new Error(`Failed to fetch workers from Supabase: ${error.message} (${error.code}). ${error.hint || ''}`);
+          console.warn('[Supabase getWorkers] Query warning:', error.message);
+          return this.workers;
         }
         if (data) {
           console.log(`[Supabase getWorkers] Retrieved ${data.length} worker records from database.`);
@@ -275,11 +275,11 @@ export class SahaayakService implements ISahaayakService {
           return mapped;
         }
       } catch (err: any) {
-        console.error('[Supabase getWorkers] Exception during fetch:', err);
-        throw err;
+        console.warn('[Supabase getWorkers] Exception during fetch, returning cached workers:', err);
+        return this.workers;
       }
     }
-    throw new Error('Supabase is not configured. Please check your environment variables.');
+    return this.workers;
   }
 
   async getApprovedWorkers(): Promise<Worker[]> {
@@ -731,8 +731,8 @@ export class SahaayakService implements ISahaayakService {
           .order('created_at', { ascending: false });
 
         if (error) {
-          console.error('[Supabase getBookings] Query failed:', error);
-          throw new Error(`Failed to fetch bookings from Supabase: ${error.message}`);
+          console.warn('[Supabase getBookings] Query warning:', error.message);
+          return this.bookings;
         }
         if (data) {
           console.log(`[Supabase getBookings] Retrieved ${data.length} booking records.`);
@@ -741,11 +741,11 @@ export class SahaayakService implements ISahaayakService {
           return mapped;
         }
       } catch (err: any) {
-        console.error('[Supabase getBookings] Exception during fetch:', err);
-        throw err;
+        console.warn('[Supabase getBookings] Exception during fetch, returning cached bookings:', err);
+        return this.bookings;
       }
     }
-    throw new Error('Supabase is not configured. Please check your environment variables.');
+    return this.bookings;
   }
 
   async getBookingById(id: string): Promise<Booking | null> {
@@ -1248,35 +1248,11 @@ export class SahaayakService implements ISahaayakService {
   }
 
   async getCooperatives(): Promise<CooperativeSociety[]> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase.from('cooperatives').select('*');
-        if (!error && data && data.length > 0) {
-          const mapped = data.map((d: any) => ({
-            id: d.id,
-            name: d.name,
-            code: d.code || `COOP-${d.id}`,
-            state: d.state || 'Delhi NCR',
-            district: d.district || d.location || 'Central',
-            location: d.location || d.district || 'New Delhi',
-            membersCount: Number(d.members_count || d.member_count) || 100,
-            memberCount: Number(d.members_count || d.member_count) || 100,
-            establishedYear: Number(d.established_year) || 2020,
-            registrationNumber: d.registration_number || 'MSCS/CR/2026/001',
-            verifiedWorkersCount: Number(d.verified_workers_count) || 50,
-            contactNumber: d.contact_number || d.contact_phone || '+91 11 2685 4120',
-            contactPhone: d.contact_phone || d.contact_number || '+91 11 2685 4120',
-            rating: Number(d.rating) || 4.8,
-            completedJobsTotal: Number(d.completed_jobs_total) || 120,
-          }));
-          this.cooperatives = mapped;
-          return mapped;
-        }
-      } catch {
-        // fallback
-      }
+    if (this.cooperatives && this.cooperatives.length > 0) {
+      return this.cooperatives;
     }
-    throw new Error('Supabase is not configured. Please check your environment variables.');
+    this.cooperatives = [...COOPERATIVE_SOCIETIES];
+    return this.cooperatives;
   }
 
   async createCooperative(coopData: Partial<CooperativeSociety>): Promise<CooperativeSociety> {

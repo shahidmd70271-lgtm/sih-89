@@ -16,6 +16,7 @@ import {
   DateSlotOverride,
   Review,
 } from '../types';
+import { COOPERATIVE_SOCIETIES } from '../data/mockData';
 import { translate } from '../translations';
 import { authService } from '../services/authService';
 import { sahaayakService } from '../services/sahaayakService';
@@ -343,137 +344,157 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isCustomerAuthModalOpen, setIsCustomerAuthModalOpen] = useState(false);
   const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState(false);
   const [isWorkerAuthModalOpen, setIsWorkerAuthModalOpen] = useState(false);
+  const [isWorkerJoinModalOpen, setIsWorkerJoinModalOpen] = useState(false);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
+  const [isWorkerProfileModalOpen, setIsWorkerProfileModalOpen] = useState(false);
+  const [isMessagesModalOpen, setIsMessagesModalOpen] = useState(false);
+  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewModalBooking, setReviewModalBooking] = useState<Booking | null>(null);
 
   // Real database state (initial empty state, filled by real user actions)
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [cooperatives, setCooperatives] = useState<CooperativeSociety[]>([]);
+  const [cooperatives, setCooperatives] = useState<CooperativeSociety[]>(COOPERATIVE_SOCIETIES);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [selectedServiceFilter, setSelectedServiceFilter] = useState<ServiceType | 'All'>('All');
-
-  // Load database records on mount & subscribe to Supabase Realtime updates
-  useEffect(() => {
-    const loadRealData = async () => {
-      try {
-        console.log('[AppContext] Loading backend records from Supabase...');
-        const [dbWorkers, dbBookings, dbCoops, dbReviews] = await Promise.all([
-          sahaayakService.getWorkers().catch((err) => {
-            console.error('[AppContext] Workers load failed:', err);
-            return [];
-          }),
-          sahaayakService.getBookings().catch((err) => {
-            console.error('[AppContext] Bookings load failed:', err);
-            return [];
-          }),
-          sahaayakService.getCooperatives().catch((err) => {
-            console.error('[AppContext] Cooperatives load failed:', err);
-            return [];
-          }),
-          sahaayakService.getReviews().catch((err) => {
-            console.error('[AppContext] Reviews load failed:', err);
-            return [];
-          }),
-        ]);
-        console.log('[AppContext] Loaded records:', {
-          workers: dbWorkers.length,
-          bookings: dbBookings.length,
-          cooperatives: dbCoops.length,
-          reviews: dbReviews.length,
-        });
-        setWorkers(dbWorkers);
-        setBookings(dbBookings);
-        setCooperatives(dbCoops);
-        setReviews(dbReviews);
-        const initialActive = dbBookings.find((b) => isBookingActiveForExecution(b.status));
-        if (initialActive) {
-          setActiveBookingId(initialActive.id);
-        } else {
-          setActiveBookingId(null);
-        }
-      } catch (err) {
-        console.error('[AppContext] Global load error:', err);
-      }
-    };
-    loadRealData();
-
-    // Supabase Realtime updates
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const bookingsChannel = supabase
-          .channel('sahaayak-realtime-bookings')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async () => {
-            const updated = await sahaayakService.getBookings();
-            setBookings(updated);
-          })
-          .subscribe();
-
-        const workersChannel = supabase
-          .channel('sahaayak-realtime-workers')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'workers' }, async () => {
-            const updatedWorkers = await sahaayakService.getWorkers();
-            setWorkers(updatedWorkers);
-          })
-          .subscribe();
-
-        const reviewsChannel = supabase
-          .channel('sahaayak-realtime-reviews')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, async () => {
-            const updatedReviews = await sahaayakService.getReviews();
-            setReviews(updatedReviews);
-            const updatedWorkers = await sahaayakService.getWorkers();
-            setWorkers(updatedWorkers);
-          })
-          .subscribe();
-
-        const pollInterval = setInterval(async () => {
-          try {
-            const freshBookings = await sahaayakService.getBookings();
-            setBookings(freshBookings);
-          } catch (e) {
-            // silent catch on background poll
-          }
-        }, 4000);
-
-        return () => {
-          clearInterval(pollInterval);
-          supabase.removeChannel(bookingsChannel);
-          supabase.removeChannel(workersChannel);
-          supabase.removeChannel(reviewsChannel);
-        };
-      } catch (err) {
-        console.warn('Realtime subscription error:', err);
-      }
-    }
-  }, []);
-
-  // Worker Online Status
   const [isWorkerOnline, setIsWorkerOnline] = useState<boolean>(true);
 
-  // Reviews & Ratings State
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [reviewModalBooking, setReviewModalBooking] = useState<Booking | null>(null);
+  // Worker Notifications & Chat
+  const [workerNotifications, setWorkerNotifications] = useState<WorkerNotification[]>([]);
+  const [isWorkerNotifPanelOpen, setIsWorkerNotifPanelOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const openReviewModal = (booking: Booking) => {
     setReviewModalBooking(booking);
     setIsReviewModalOpen(true);
   };
 
-  // Worker Notifications
-  const [workerNotifications, setWorkerNotifications] = useState<WorkerNotification[]>([]);
-  const [isWorkerNotifPanelOpen, setIsWorkerNotifPanelOpen] = useState(false);
+  // Conditional Data Loader: Loads data on-demand based on active portal/view
+  useEffect(() => {
+    // Skip backend calls when merely viewing the landing page without auth or modals
+    const isLandingOnly = activeView === 'landing' && !currentUser && !isBookingModalOpen;
+    if (isLandingOnly) {
+      return;
+    }
 
-  // Modals
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
-  const [isWorkerProfileModalOpen, setIsWorkerProfileModalOpen] = useState(false);
-  const [isMessagesModalOpen, setIsMessagesModalOpen] = useState(false);
-  const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [isWorkerJoinModalOpen, setIsWorkerJoinModalOpen] = useState(false);
+    let isMounted = true;
 
-  // Chat messages
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const loadPortalData = async () => {
+      try {
+        const needsWorkers =
+          activeView === 'find-services' ||
+          activeView === 'booking-flow' ||
+          isBookingModalOpen ||
+          currentRole === 'worker' ||
+          activeView.startsWith('worker-') ||
+          currentRole === 'admin' ||
+          activeView.startsWith('admin-');
+
+        const needsBookings =
+          activeView === 'my-bookings' ||
+          activeView === 'customer-dashboard' ||
+          currentRole === 'worker' ||
+          activeView.startsWith('worker-') ||
+          currentRole === 'admin' ||
+          activeView.startsWith('admin-') ||
+          Boolean(currentUser);
+
+        const needsReviews =
+          activeView === 'find-services' ||
+          activeView === 'my-bookings' ||
+          currentRole === 'admin' ||
+          activeView.startsWith('admin-');
+
+        const promises: Promise<any>[] = [];
+
+        if (needsWorkers && workers.length === 0) {
+          promises.push(
+            sahaayakService.getWorkers().then((dbWorkers) => {
+              if (isMounted) setWorkers(dbWorkers);
+            }).catch((err) => console.warn('[AppContext] Workers load notice:', err))
+          );
+        }
+
+        if (needsBookings && (bookings.length === 0 || activeView.startsWith('worker-') || activeView === 'my-bookings')) {
+          promises.push(
+            sahaayakService.getBookings().then((dbBookings) => {
+              if (isMounted) {
+                setBookings(dbBookings);
+                const initialActive = dbBookings.find((b) => isBookingActiveForExecution(b.status));
+                if (initialActive) {
+                  setActiveBookingId(initialActive.id);
+                }
+              }
+            }).catch((err) => console.warn('[AppContext] Bookings load notice:', err))
+          );
+        }
+
+        if (needsReviews && reviews.length === 0) {
+          promises.push(
+            sahaayakService.getReviews().then((dbReviews) => {
+              if (isMounted) setReviews(dbReviews);
+            }).catch((err) => console.warn('[AppContext] Reviews load notice:', err))
+          );
+        }
+
+        await Promise.all(promises);
+      } catch (err) {
+        console.warn('[AppContext] Portal data fetch notice:', err);
+      }
+    };
+
+    loadPortalData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeView, currentRole, currentUser, isBookingModalOpen]);
+
+  // Worker Realtime & Polling Heartbeat (Active ONLY in Worker Portal or when Worker is signed in)
+  useEffect(() => {
+    const isWorkerActive =
+      currentRole === 'worker' ||
+      activeView.startsWith('worker-') ||
+      Boolean(currentUser && currentUser.role === 'worker');
+
+    if (!isWorkerActive || !isSupabaseConfigured || !supabase) {
+      return;
+    }
+
+    try {
+      const bookingsChannel = supabase
+        .channel('sahaayak-worker-realtime-bookings')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async () => {
+          try {
+            const updated = await sahaayakService.getBookings();
+            setBookings(updated);
+          } catch (e) {
+            // silent catch
+          }
+        })
+        .subscribe();
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const freshBookings = await sahaayakService.getBookings();
+          setBookings(freshBookings);
+        } catch (e) {
+          // silent catch on background poll
+        }
+      }, 4000);
+
+      return () => {
+        clearInterval(pollInterval);
+        supabase.removeChannel(bookingsChannel);
+      };
+    } catch (err) {
+      console.warn('[AppContext] Worker realtime subscription notice:', err);
+    }
+  }, [currentRole, activeView, currentUser]);
 
   // Current logged in worker resolution: strictly resolve to authenticated worker
   const currentWorker =
