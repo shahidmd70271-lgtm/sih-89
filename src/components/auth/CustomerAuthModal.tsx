@@ -57,6 +57,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -83,7 +85,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
       resetForm();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please check your credentials.');
+      console.error('[CustomerAuthModal] Login error:', err);
+      setErrorMessage(err?.message || 'Authentication failed. Please verify your credentials.');
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +94,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -136,7 +141,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
         setConfirmPassword('');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Registration failed. Please try again.');
+      console.error('[CustomerAuthModal] Registration error:', err);
+      setErrorMessage(err?.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

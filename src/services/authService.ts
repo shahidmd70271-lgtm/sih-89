@@ -63,16 +63,26 @@ export class AuthService implements IAuthService {
     console.log('[Customer Auth] Registering new customer via Supabase Auth:', { email: cleanEmail, name: cleanName });
 
     // 1. Register with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: cleanPass,
-      options: {
-        data: {
-          role: 'customer',
-          full_name: cleanName,
+    let authData: any = null;
+    let authError: any = null;
+
+    try {
+      const response = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPass,
+        options: {
+          data: {
+            role: 'customer',
+            full_name: cleanName,
+          },
         },
-      },
-    });
+      });
+      authData = response.data;
+      authError = response.error;
+    } catch (networkErr: any) {
+      console.error('[Customer Auth] Supabase signUp network exception:', networkErr);
+      throw new Error(networkErr?.message || 'Unable to connect to authentication service. Please check your connection.');
+    }
 
     if (authError) {
       console.error('[Customer Auth] auth.signUp failed:', authError);
@@ -85,7 +95,7 @@ export class AuthService implements IAuthService {
       throw new Error(`Registration failed: ${authError.message}`);
     }
 
-    const userId = authData.user?.id;
+    const userId = authData?.user?.id;
     if (!userId) {
       throw new Error('No user record returned from Supabase Auth.');
     }
@@ -179,20 +189,37 @@ export class AuthService implements IAuthService {
 
     console.log('[Customer Auth] Signing in customer via Supabase Auth:', cleanEmail);
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: cleanPass,
-    });
+    let authData: any = null;
+    let authError: any = null;
 
-    if (authError || !authData.user) {
-      console.error('[Customer Auth] signInWithPassword error:', authError);
-      if (authError?.message?.toLowerCase().includes('invalid login credentials')) {
-        throw new Error('Invalid email or password. Please verify your credentials.');
+    try {
+      const response = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanPass,
+      });
+      authData = response.data;
+      authError = response.error;
+    } catch (networkErr: any) {
+      console.error('[Customer Auth] Supabase network/connection error:', networkErr);
+      throw new Error(networkErr?.message || 'Unable to connect to authentication service. Please check your network.');
+    }
+
+    if (authError || !authData || !authData.user) {
+      console.error('[Customer Auth] signInWithPassword error details:', authError);
+      const rawMsg = (authError?.message || '').toLowerCase();
+      if (rawMsg.includes('invalid login credentials') || rawMsg.includes('invalid grant') || rawMsg.includes('invalid_grant') || authError?.status === 400) {
+        throw new Error('Invalid email or password. Please verify your credentials or register a new customer account.');
       }
-      if (authError?.message?.toLowerCase().includes('email not confirmed')) {
+      if (rawMsg.includes('email not confirmed')) {
         throw new Error('Email address has not been confirmed yet. Please check your inbox or try again.');
       }
-      throw new Error(authError?.message || 'Login failed. Please check your credentials.');
+      if (rawMsg.includes('user not found')) {
+        throw new Error('No customer account found with this email. Please click "Register as Customer".');
+      }
+      if (rawMsg.includes('gateway timeout') || rawMsg.includes('timeout') || authError?.status === 504) {
+        throw new Error('Authentication server is taking too long to respond. Please try again.');
+      }
+      throw new Error(authError?.message || 'Authentication failed. Please check your credentials.');
     }
 
     const userId = authData.user.id;
