@@ -45,8 +45,19 @@ ALTER TABLE public.worker_documents ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Workers and Admins can view worker documents" ON public.worker_documents;
 CREATE POLICY "Workers and Admins can view worker documents" ON public.worker_documents FOR SELECT USING (true);
 
-DROP POLICY IF EXISTS "Workers can upload their documents" ON public.worker_documents;
-CREATE POLICY "Workers can upload their documents" ON public.worker_documents FOR INSERT WITH CHECK (true);
+-- 4B. Ensure RLS Policies for Bookings
+ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public and authenticated can view bookings" ON public.bookings;
+CREATE POLICY "Public and authenticated can view bookings" ON public.bookings FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Customers and users can insert bookings" ON public.bookings;
+CREATE POLICY "Customers and users can insert bookings" ON public.bookings FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users and workers can update bookings" ON public.bookings;
+CREATE POLICY "Users and workers can update bookings" ON public.bookings FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Admins can manage all bookings" ON public.bookings;
+CREATE POLICY "Admins can manage all bookings" ON public.bookings FOR ALL USING (true);
 
 -- 5. Ensure Customers Table and Policies
 CREATE TABLE IF NOT EXISTS public.customers (

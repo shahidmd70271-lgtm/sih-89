@@ -279,6 +279,27 @@ CREATE POLICY "Admins can manage cooperatives"
   ON public.cooperatives FOR ALL
   USING (true);
 
+-- Bookings Policies
+DROP POLICY IF EXISTS "Public and authenticated can view bookings" ON public.bookings;
+CREATE POLICY "Public and authenticated can view bookings"
+  ON public.bookings FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Customers and users can insert bookings" ON public.bookings;
+CREATE POLICY "Customers and users can insert bookings"
+  ON public.bookings FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users and workers can update bookings" ON public.bookings;
+CREATE POLICY "Users and workers can update bookings"
+  ON public.bookings FOR UPDATE
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins can manage all bookings" ON public.bookings;
+CREATE POLICY "Admins can manage all bookings"
+  ON public.bookings FOR ALL
+  USING (true);
+
 -- Customers Policies
 DROP POLICY IF EXISTS "Customers and admins can view customers" ON public.customers;
 CREATE POLICY "Customers and admins can view customers"
