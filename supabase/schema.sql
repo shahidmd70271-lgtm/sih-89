@@ -21,6 +21,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 -- ==============================================================================
+-- 1B. CUSTOMERS TABLE (Linked with public.profiles and auth.users)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.customers (
+  id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  email TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==============================================================================
 -- 2. WORKERS TABLE
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.workers (
@@ -268,17 +279,45 @@ CREATE POLICY "Admins can manage cooperatives"
   ON public.cooperatives FOR ALL
   USING (true);
 
+-- Customers Policies
+DROP POLICY IF EXISTS "Customers and admins can view customers" ON public.customers;
+CREATE POLICY "Customers and admins can view customers"
+  ON public.customers FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Customers can insert their own record" ON public.customers;
+CREATE POLICY "Customers can insert their own record"
+  ON public.customers FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Customers can update their own record" ON public.customers;
+CREATE POLICY "Customers can update their own record"
+  ON public.customers FOR UPDATE
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins can manage customer records" ON public.customers;
+CREATE POLICY "Admins can manage customer records"
+  ON public.customers FOR ALL
+  USING (true);
+
 -- ==============================================================================
--- 10. AUTH HOOK TRIGGER: AUTOMATIC PROFILE CREATION ON USER SIGN-UP
+-- 10. AUTH HOOK TRIGGER: AUTOMATIC PROFILE & CUSTOMER CREATION ON USER SIGN-UP
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  user_role TEXT;
+  user_name TEXT;
 BEGIN
+  user_role := COALESCE(NEW.raw_user_meta_data->>'role', 'customer');
+  user_name := COALESCE(NEW.raw_user_meta_data->>'full_name', 'Sahaayak User');
+
+  -- 1. Insert/Update public.profiles
   INSERT INTO public.profiles (id, role, full_name, email, phone, status, created_at, updated_at)
   VALUES (
     NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'role', 'customer'),
-    COALESCE(NEW.raw_user_meta_data->>'full_name', 'Sahaayak User'),
+    user_role,
+    user_name,
     NEW.email,
     NEW.raw_user_meta_data->>'phone',
     'active',
@@ -289,6 +328,23 @@ BEGIN
     role = EXCLUDED.role,
     full_name = EXCLUDED.full_name,
     updated_at = NOW();
+
+  -- 2. If role is 'customer', insert/update public.customers
+  IF user_role = 'customer' THEN
+    INSERT INTO public.customers (id, full_name, email, created_at, updated_at)
+    VALUES (
+      NEW.id,
+      user_name,
+      NEW.email,
+      NOW(),
+      NOW()
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      full_name = EXCLUDED.full_name,
+      email = EXCLUDED.email,
+      updated_at = NOW();
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

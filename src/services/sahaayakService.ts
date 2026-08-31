@@ -2,6 +2,7 @@ import {
   Booking,
   BookingStatus,
   CooperativeSociety,
+  Customer,
   Payment,
   PaymentMode,
   ServiceType,
@@ -1178,6 +1179,56 @@ export class SahaayakService implements ISahaayakService {
 
     this.cooperatives = [newCoop, ...this.cooperatives];
     return newCoop;
+  }
+
+  // ===================== CUSTOMERS =====================
+  async getCustomerById(id: string): Promise<Customer | null> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            full_name: data.full_name,
+            email: data.email,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase getCustomerById notice:', err);
+      }
+    }
+    return null;
+  }
+
+  async getCustomers(): Promise<Customer[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          return data.map((d: any) => ({
+            id: d.id,
+            full_name: d.full_name,
+            email: d.email,
+            created_at: d.created_at,
+            updated_at: d.updated_at,
+          }));
+        }
+      } catch (err) {
+        console.warn('Supabase getCustomers notice:', err);
+      }
+    }
+    return [];
   }
 }
 

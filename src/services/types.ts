@@ -1,4 +1,4 @@
-import { AuthUser, Booking, CooperativeSociety, Review, ServiceType, Worker, WorkerNotification } from '../types';
+import { AuthUser, Booking, CooperativeSociety, Customer, Review, ServiceType, Worker, WorkerNotification } from '../types';
 
 export interface IAuthService {
   customerSignUp(params: {
@@ -48,4 +48,8 @@ export interface ISahaayakService {
   // Cooperatives
   getCooperatives(): Promise<CooperativeSociety[]>;
   createCooperative(coopData: Partial<CooperativeSociety>): Promise<CooperativeSociety>;
+
+  // Customers
+  getCustomerById(id: string): Promise<Customer | null>;
+  getCustomers(): Promise<Customer[]>;
 }

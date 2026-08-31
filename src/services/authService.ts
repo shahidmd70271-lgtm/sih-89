@@ -117,6 +117,30 @@ export class AuthService implements IAuthService {
       console.warn('[Customer Auth] Profiles upsert exception:', err);
     }
 
+    // 3. Ensure public.customers record is created/upserted with customer details
+    try {
+      const { error: custErr } = await supabase
+        .from('customers')
+        .upsert(
+          {
+            id: userId,
+            full_name: cleanName,
+            email: cleanEmail,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+
+      if (custErr) {
+        console.warn('[Customer Auth] Customers table upsert notice:', custErr.message);
+      } else {
+        console.log('[Customer Auth] Customer record confirmed in public.customers for ID:', userId);
+      }
+    } catch (err) {
+      console.warn('[Customer Auth] Customers table upsert exception:', err);
+    }
+
     const session = authData.session;
     let authUser: AuthUser | null = null;
     if (session && authData.user) {
@@ -187,7 +211,7 @@ export class AuthService implements IAuthService {
     const fullName = profile?.full_name || authData.user.user_metadata?.full_name || cleanEmail.split('@')[0];
     const role: UserRole = profile?.role || (authData.user.user_metadata?.role as UserRole) || 'customer';
 
-    // If profile row doesn't exist yet, insert it
+    // Ensure profile row exists in public.profiles
     if (!profile) {
       try {
         await supabase.from('profiles').upsert(
@@ -204,6 +228,21 @@ export class AuthService implements IAuthService {
       } catch (err) {
         console.warn('[Customer Auth] Auto-create profile notice:', err);
       }
+    }
+
+    // Ensure customer row exists in public.customers
+    try {
+      await supabase.from('customers').upsert(
+        {
+          id: userId,
+          full_name: fullName,
+          email: cleanEmail,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+    } catch (err) {
+      console.warn('[Customer Auth] Auto-create customer notice:', err);
     }
 
     const customerUser: AuthUser = {

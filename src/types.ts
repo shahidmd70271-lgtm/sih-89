@@ -14,6 +14,14 @@ export interface Profile {
   created_at?: string;
 }
 
+export interface Customer {
+  id: string;
+  full_name: string;
+  email?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
