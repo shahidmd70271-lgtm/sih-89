@@ -12,10 +12,6 @@ import { COOPERATIVE_SOCIETIES } from '../data/mockData';
 import { ISahaayakService } from './types';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
-const STORAGE_KEY_WORKERS = 'sahaayak_real_workers_db';
-const STORAGE_KEY_BOOKINGS = 'sahaayak_real_bookings_db';
-const STORAGE_KEY_PAYMENTS = 'sahaayak_real_payments_db';
-const STORAGE_KEY_COOPERATIVES = 'sahaayak_real_cooperatives_db';
 
 export const mapDbRowToWorker = (row: any): Worker => {
   const isApproved =
@@ -169,71 +165,9 @@ export class SahaayakService implements ISahaayakService {
   private cooperatives: CooperativeSociety[] = [];
 
   constructor() {
-    this.initDatabase();
   }
 
-  private initDatabase(): void {
-    try {
-      const storedWorkers = localStorage.getItem(STORAGE_KEY_WORKERS);
-      // Clean, real data only: default to empty array if no real worker has registered
-      this.workers = storedWorkers ? JSON.parse(storedWorkers) : [];
-    } catch {
-      this.workers = [];
-    }
 
-    try {
-      const storedBookings = localStorage.getItem(STORAGE_KEY_BOOKINGS);
-      this.bookings = storedBookings ? JSON.parse(storedBookings) : [];
-    } catch {
-      this.bookings = [];
-    }
-
-    try {
-      const storedPayments = localStorage.getItem(STORAGE_KEY_PAYMENTS);
-      this.payments = storedPayments ? JSON.parse(storedPayments) : [];
-    } catch {
-      this.payments = [];
-    }
-
-    try {
-      const storedCoops = localStorage.getItem(STORAGE_KEY_COOPERATIVES);
-      this.cooperatives = storedCoops ? JSON.parse(storedCoops) : [...COOPERATIVE_SOCIETIES];
-    } catch {
-      this.cooperatives = [...COOPERATIVE_SOCIETIES];
-    }
-  }
-
-  private persistWorkers(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_WORKERS, JSON.stringify(this.workers));
-    } catch {
-      // ignore
-    }
-  }
-
-  private persistBookings(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(this.bookings));
-    } catch {
-      // ignore
-    }
-  }
-
-  private persistPayments(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(this.payments));
-    } catch {
-      // ignore
-    }
-  }
-
-  private persistCooperatives(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY_COOPERATIVES, JSON.stringify(this.cooperatives));
-    } catch {
-      // ignore
-    }
-  }
 
   // ===================== WORKERS =====================
   async getWorkers(): Promise<Worker[]> {
@@ -249,7 +183,6 @@ export class SahaayakService implements ISahaayakService {
           console.log(`[Supabase getWorkers] Retrieved ${data.length} worker records from database.`);
           const mapped = data.map(mapDbRowToWorker);
           this.workers = mapped;
-          this.persistWorkers();
           return mapped;
         }
       } catch (err: any) {
@@ -257,7 +190,7 @@ export class SahaayakService implements ISahaayakService {
         throw err;
       }
     }
-    return [...this.workers];
+    throw new Error('Supabase is not configured. Please check your environment variables.');
   }
 
   async getApprovedWorkers(): Promise<Worker[]> {
@@ -382,45 +315,10 @@ export class SahaayakService implements ISahaayakService {
         } else if (authData.user) {
           authUserId = authData.user.id;
         }
-
-        // 2. Upsert profiles table with role = 'worker'
-        if (authUserId) {
-          console.log('[Supabase Worker Registration] Step 2: Upserting public.profiles with Auth UUID:', authUserId);
-          const profilePayload = {
-            id: authUserId,
-            role: 'worker',
-            full_name: workerData.name || 'Worker Applicant',
-            email: cleanEmail,
-            phone: cleanPhone || null,
-            avatar_url: workerData.avatar || null,
-            status: 'active',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-
-          console.log('[Supabase Worker Registration] Profile payload to insert:', profilePayload);
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .upsert([profilePayload])
-            .select();
-
-          console.log('[Supabase Worker Registration] Step 2 public.profiles response:', {
-            data: profileData,
-            error: profileError ? {
-              code: profileError.code,
-              message: profileError.message,
-              details: profileError.details,
-              hint: profileError.hint,
-            } : null,
-          });
-
-          if (profileError) {
-            console.error('[Supabase Worker Registration] public.profiles upsert failed:', profileError);
-            throw new Error(`Failed to create worker profile in Supabase: ${profileError.message} (Code: ${profileError.code}). ${profileError.hint || ''}`);
-          }
-        }
+        // Note: We rely on the Supabase database trigger 'on_auth_user_created'
+        // to automatically create the entry in public.profiles.
       } catch (authErr: any) {
-        console.error('[Supabase Worker Registration] Auth & Profile pipeline failed:', authErr);
+        console.error('[Supabase Worker Registration] Auth pipeline failed:', authErr);
         throw authErr;
       }
     }
@@ -489,7 +387,7 @@ export class SahaayakService implements ISahaayakService {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        console.log('[Supabase Worker Registration] Step 3: Inserting row into public.workers table...');
+        console.log('[Supabase Worker Registration] Step 2: Inserting row into public.workers table...');
         const dbRow = mapWorkerToDbRow(newWorker, authUserId);
         console.log('[Supabase Worker Registration] Worker DB row to insert:', dbRow);
 
@@ -498,7 +396,7 @@ export class SahaayakService implements ISahaayakService {
           .insert([dbRow])
           .select();
 
-        console.log('[Supabase Worker Registration] Step 3 public.workers response:', {
+        console.log('[Supabase Worker Registration] Step 2 public.workers response:', {
           data: wkrData,
           error: insertErr ? {
             code: insertErr.code,
@@ -513,11 +411,14 @@ export class SahaayakService implements ISahaayakService {
           throw new Error(`Failed to persist worker record in Supabase: ${insertErr.message} (Code: ${insertErr.code}). ${insertErr.hint || ''}`);
         }
 
-        // 4. Insert documents into worker_documents table if present
+        // Use the ID returned from the database if available, otherwise fall back to our generated ID
+        const finalWorkerId = wkrData?.[0]?.id || newWorker.id;
+
+        // 3. Insert documents into worker_documents table if present
         if (workerData.documents && workerData.documents.length > 0) {
-          console.log('[Supabase Worker Registration] Step 4: Inserting worker_documents records...');
+          console.log('[Supabase Worker Registration] Step 3: Inserting worker_documents records...');
           const docRows = workerData.documents.map((doc) => ({
-            worker_id: newWorker.id,
+            worker_id: finalWorkerId,
             document_type: doc.type || doc.document_type || 'Identity Proof',
             document_name: doc.name || 'Verification Document',
             document_url: doc.fileUrl || doc.file_path || 'https://sahaayak.gov.in/docs/sample_kyc.pdf',
@@ -530,7 +431,7 @@ export class SahaayakService implements ISahaayakService {
             .insert(docRows)
             .select();
 
-          console.log('[Supabase Worker Registration] Step 4 worker_documents response:', {
+          console.log('[Supabase Worker Registration] Step 3 worker_documents response:', {
             data: docsData,
             error: docErr ? {
               code: docErr.code,
@@ -545,9 +446,9 @@ export class SahaayakService implements ISahaayakService {
           }
         }
 
-        console.log('[Supabase Worker Registration] Step 5: Querying fresh worker records from Supabase...');
+        console.log('[Supabase Worker Registration] Step 4: Querying fresh worker records from Supabase...');
         const freshWorkers = await this.getWorkers();
-        const created = freshWorkers.find((w) => w.id === newWorker.id || w.profile_id === authUserId);
+        const created = freshWorkers.find((w) => w.id === finalWorkerId || w.profile_id === authUserId);
         console.log('[Supabase Worker Registration] Confirmed persistence in Supabase:', created?.id);
         return created || newWorker;
       } catch (err: any) {
@@ -557,7 +458,6 @@ export class SahaayakService implements ISahaayakService {
     }
 
     this.workers = [newWorker, ...this.workers.filter((w) => w.id !== newWorker.id)];
-    this.persistWorkers();
     return newWorker;
   }
 
@@ -599,7 +499,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistWorkers();
     return { ...worker };
   }
 
@@ -635,8 +534,6 @@ export class SahaayakService implements ISahaayakService {
           console.warn('Worker rejection exception:', err);
         }
       }
-
-      this.persistWorkers();
     }
   }
 
@@ -678,7 +575,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistWorkers();
     return { ...worker };
   }
 
@@ -686,7 +582,6 @@ export class SahaayakService implements ISahaayakService {
     const worker = this.workers.find((w) => w.id === workerId);
     if (worker) {
       worker.availability = isOnline ? 'Available Today' : 'Offline';
-      this.persistWorkers();
     }
   }
 
@@ -702,7 +597,7 @@ export class SahaayakService implements ISahaayakService {
         // fallback
       }
     }
-    return [...this.bookings];
+    throw new Error('Supabase is not configured. Please check your environment variables.');
   }
 
   async getBookingById(id: string): Promise<Booking | null> {
@@ -760,47 +655,49 @@ export class SahaayakService implements ISahaayakService {
       paymentStatus: 'pending',
     };
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('bookings').insert([
-          {
-            id: newBooking.id,
-            customer_id: newBooking.customer_id,
-            customer_name: newBooking.customerName,
-            customer_phone: newBooking.customerPhone,
-            customer_address: newBooking.customerAddress,
-            latitude: newBooking.latitude || null,
-            longitude: newBooking.longitude || null,
-            worker_id: newBooking.workerId,
-            worker_name: newBooking.workerName,
-            worker_skill: newBooking.workerSkill,
-            worker_avatar: newBooking.workerAvatar,
-            worker_phone: newBooking.workerPhone,
-            service_type: newBooking.serviceType,
-            scheduled_date: newBooking.date,
-            time_slot: newBooking.timeSlot,
-            slot_id: newBooking.slotId,
-            problem_description: newBooking.problemDescription,
-            estimated_price: newBooking.estimatedPrice,
-            platform_fee: newBooking.platformFee,
-            welfare_cess: newBooking.welfareCess,
-            total_amount: newBooking.totalAmount,
-            status: newBooking.status,
-            is_emergency: newBooking.isEmergency,
-            eta_minutes: newBooking.etaMinutes,
-            otp: newBooking.otp,
-            otp_verified: false,
-            payment_status: 'pending',
-            created_at: newBooking.created_at,
-          },
-        ]);
-      } catch (err) {
-        console.warn('Supabase booking insert warning:', err);
-      }
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Bookings cannot be created without a backend.');
+    }
+
+    try {
+      await supabase.from('bookings').insert([
+        {
+          id: newBooking.id,
+          customer_id: newBooking.customer_id,
+          customer_name: newBooking.customerName,
+          customer_phone: newBooking.customerPhone,
+          customer_address: newBooking.customerAddress,
+          latitude: newBooking.latitude || null,
+          longitude: newBooking.longitude || null,
+          worker_id: newBooking.workerId,
+          worker_name: newBooking.workerName,
+          worker_skill: newBooking.workerSkill,
+          worker_avatar: newBooking.workerAvatar,
+          worker_phone: newBooking.workerPhone,
+          service_type: newBooking.serviceType,
+          scheduled_date: newBooking.date,
+          time_slot: newBooking.timeSlot,
+          slot_id: newBooking.slotId,
+          problem_description: newBooking.problemDescription,
+          estimated_price: newBooking.estimatedPrice,
+          platform_fee: newBooking.platformFee,
+          welfare_cess: newBooking.welfareCess,
+          total_amount: newBooking.totalAmount,
+          status: newBooking.status,
+          is_emergency: newBooking.isEmergency,
+          eta_minutes: newBooking.etaMinutes,
+          otp: newBooking.otp,
+          otp_verified: false,
+          payment_status: 'pending',
+          created_at: newBooking.created_at,
+        },
+      ]);
+    } catch (err) {
+      console.warn('Supabase booking insert warning:', err);
+      throw err;
     }
 
     this.bookings = [newBooking, ...this.bookings];
-    this.persistBookings();
     return newBooking;
   }
 
@@ -826,7 +723,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistBookings();
     return { ...booking };
   }
 
@@ -854,7 +750,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistBookings();
     return { ...booking };
   }
 
@@ -889,7 +784,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistBookings();
     return { success: true, message: 'OTP verified successfully. Service started.' };
   }
 
@@ -913,7 +807,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistBookings();
     return { ...booking };
   }
 
@@ -962,8 +855,7 @@ export class SahaayakService implements ISahaayakService {
       const worker = this.workers.find((w) => w.id === booking.workerId);
       if (worker) {
         worker.completedJobs = (worker.completedJobs || 0) + 1;
-        this.persistWorkers();
-      }
+              }
     }
 
     if (isSupabaseConfigured && supabase) {
@@ -1002,9 +894,6 @@ export class SahaayakService implements ISahaayakService {
     }
 
     this.payments = [paymentRecord, ...this.payments];
-    this.persistPayments();
-    this.persistBookings();
-
     return { booking: { ...booking }, payment: paymentRecord };
   }
 
@@ -1021,15 +910,13 @@ export class SahaayakService implements ISahaayakService {
     if (payment) {
       payment.payment_status = 'paid';
       payment.paid_at = new Date().toISOString();
-      this.persistPayments();
-    }
+          }
 
     // Increment worker completed jobs
     const worker = this.workers.find((w) => w.id === booking.workerId);
     if (worker) {
       worker.completedJobs = (worker.completedJobs || 0) + 1;
-      this.persistWorkers();
-    }
+          }
 
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1054,7 +941,6 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    this.persistBookings();
     return { ...booking };
   }
 
@@ -1162,14 +1048,13 @@ export class SahaayakService implements ISahaayakService {
             completedJobsTotal: Number(d.completed_jobs_total) || 120,
           }));
           this.cooperatives = mapped;
-          this.persistCooperatives();
           return mapped;
         }
       } catch {
         // fallback
       }
     }
-    return [...this.cooperatives];
+    throw new Error('Supabase is not configured. Please check your environment variables.');
   }
 
   async createCooperative(coopData: Partial<CooperativeSociety>): Promise<CooperativeSociety> {
@@ -1192,33 +1077,35 @@ export class SahaayakService implements ISahaayakService {
       completedJobsTotal: 0,
     };
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('cooperatives').insert([
-          {
-            id: newCoop.id,
-            name: newCoop.name,
-            code: newCoop.code,
-            state: newCoop.state,
-            district: newCoop.district,
-            location: newCoop.location,
-            members_count: newCoop.membersCount,
-            established_year: newCoop.establishedYear,
-            registration_number: newCoop.registrationNumber,
-            verified_workers_count: newCoop.verifiedWorkersCount,
-            contact_number: newCoop.contactNumber,
-            rating: newCoop.rating,
-            completed_jobs_total: newCoop.completedJobsTotal,
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      } catch (err) {
-        console.warn('Supabase cooperative insert warning:', err);
-      }
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Cooperative creation cannot proceed without a backend.');
+    }
+
+    try {
+      await supabase.from('cooperatives').insert([
+        {
+          id: newCoop.id,
+          name: newCoop.name,
+          code: newCoop.code,
+          state: newCoop.state,
+          district: newCoop.district,
+          location: newCoop.location,
+          members_count: newCoop.membersCount,
+          established_year: newCoop.establishedYear,
+          registration_number: newCoop.registrationNumber,
+          verified_workers_count: newCoop.verifiedWorkersCount,
+          contact_number: newCoop.contactNumber,
+          rating: newCoop.rating,
+          completed_jobs_total: newCoop.completedJobsTotal,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+    } catch (err) {
+      console.warn('Supabase cooperative insert warning:', err);
+      throw err;
     }
 
     this.cooperatives = [newCoop, ...this.cooperatives];
-    this.persistCooperatives();
     return newCoop;
   }
 }
