@@ -14,6 +14,7 @@ import {
   Payment,
   CooperativeSociety,
   DateSlotOverride,
+  Review,
 } from '../types';
 import { translate } from '../translations';
 import { authService } from '../services/authService';
@@ -101,6 +102,17 @@ interface AppContextType {
   setIsCallModalOpen: (open: boolean) => void;
   isWorkerJoinModalOpen: boolean;
   setIsWorkerJoinModalOpen: (open: boolean) => void;
+  isReviewModalOpen: boolean;
+  setIsReviewModalOpen: (open: boolean) => void;
+  reviewModalBooking: Booking | null;
+  openReviewModal: (booking: Booking) => void;
+  reviews: Review[];
+  submitReview: (params: {
+    bookingId: string;
+    workerId: string;
+    rating: number;
+    feedback?: string;
+  }) => Promise<Review>;
 
   // Actions
   openBookingForWorker: (worker: Worker, isEmergency?: boolean) => void;
@@ -344,7 +356,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const loadRealData = async () => {
       try {
         console.log('[AppContext] Loading backend records from Supabase...');
-        const [dbWorkers, dbBookings, dbCoops] = await Promise.all([
+        const [dbWorkers, dbBookings, dbCoops, dbReviews] = await Promise.all([
           sahaayakService.getWorkers().catch((err) => {
             console.error('[AppContext] Workers load failed:', err);
             return [];
@@ -357,15 +369,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('[AppContext] Cooperatives load failed:', err);
             return [];
           }),
+          sahaayakService.getReviews().catch((err) => {
+            console.error('[AppContext] Reviews load failed:', err);
+            return [];
+          }),
         ]);
         console.log('[AppContext] Loaded records:', {
           workers: dbWorkers.length,
           bookings: dbBookings.length,
           cooperatives: dbCoops.length,
+          reviews: dbReviews.length,
         });
         setWorkers(dbWorkers);
         setBookings(dbBookings);
         setCooperatives(dbCoops);
+        setReviews(dbReviews);
         if (dbBookings.length > 0) {
           setActiveBookingId(dbBookings[0].id);
         }
@@ -394,9 +412,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
           .subscribe();
 
+        const reviewsChannel = supabase
+          .channel('sahaayak-realtime-reviews')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, async () => {
+            const updatedReviews = await sahaayakService.getReviews();
+            setReviews(updatedReviews);
+            const updatedWorkers = await sahaayakService.getWorkers();
+            setWorkers(updatedWorkers);
+          })
+          .subscribe();
+
         return () => {
           supabase.removeChannel(bookingsChannel);
           supabase.removeChannel(workersChannel);
+          supabase.removeChannel(reviewsChannel);
         };
       } catch (err) {
         console.warn('Realtime subscription error:', err);
@@ -406,6 +435,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Worker Online Status
   const [isWorkerOnline, setIsWorkerOnline] = useState<boolean>(true);
+
+  // Reviews & Ratings State
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewModalBooking, setReviewModalBooking] = useState<Booking | null>(null);
+
+  const openReviewModal = (booking: Booking) => {
+    setReviewModalBooking(booking);
+    setIsReviewModalOpen(true);
+  };
 
   // Worker Notifications
   const [workerNotifications, setWorkerNotifications] = useState<WorkerNotification[]>([]);
@@ -897,6 +936,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return sahaayakService.getWorkerEarnings(targetId);
   };
 
+  const submitReview = async (params: {
+    bookingId: string;
+    workerId: string;
+    rating: number;
+    feedback?: string;
+  }): Promise<Review> => {
+    const newReview = await sahaayakService.submitBookingReview({
+      bookingId: params.bookingId,
+      workerId: params.workerId,
+      rating: params.rating,
+      feedback: params.feedback,
+      customerId: currentUser?.id,
+      customerName: currentUser?.name,
+    });
+
+    setReviews((prev) => [newReview, ...prev.filter((r) => r.bookingId !== params.bookingId && r.booking_id !== params.bookingId)]);
+
+    // Refresh workers to update average rating and review count
+    const updatedWorkers = await sahaayakService.getWorkers();
+    setWorkers(updatedWorkers);
+
+    return newReview;
+  };
+
   const sendChatMessage = (text: string, sender: 'customer' | 'worker' = 'customer') => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -913,7 +976,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           {
             id: `msg-${Date.now() + 1}`,
             sender: 'worker',
-            text: 'Message received. I am on schedule.',
+            text: 'Namaste! I am on my way with necessary equipment.',
             timestamp: 'Just now',
           },
         ]);
@@ -943,10 +1006,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginAsWorker,
         loginAsAdmin,
         logout,
-        workers,
         currentWorker,
-        cooperatives,
+        workers,
         bookings,
+        cooperatives,
         activeBooking,
         selectedWorker,
         selectedServiceFilter,
@@ -974,6 +1037,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsCallModalOpen,
         isWorkerJoinModalOpen,
         setIsWorkerJoinModalOpen,
+        isReviewModalOpen,
+        setIsReviewModalOpen,
+        reviewModalBooking,
+        openReviewModal,
+        reviews,
+        submitReview,
         openBookingForWorker,
         openWorkerProfile,
         createNewBooking,

@@ -420,18 +420,22 @@ export const ServiceSearchCatalog: React.FC = () => {
                     </span>
                   </div>
 
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 truncate">{worker.name}</h4>
-                    <p className="text-xs text-slate-500 flex items-center gap-1 font-medium">
-                      <ServiceIcon name={worker.skill} className="w-3 h-3 text-emerald-600" />
-                      <span>{worker.skill}</span>
-                      <span>•</span>
-                      <span>⭐ {worker.rating || 5.0}</span>
-                    </p>
-                    <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                      🏛️ {worker.cooperativeName}
-                    </p>
-                  </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 truncate">{worker.name}</h4>
+                      <p className="text-xs text-slate-500 flex items-center gap-1 font-medium">
+                        <ServiceIcon name={worker.skill} className="w-3 h-3 text-emerald-600" />
+                        <span>{worker.skill}</span>
+                        <span>•</span>
+                        <span>
+                          {worker.reviewsCount && worker.reviewsCount > 0
+                            ? `⭐ ${Number(worker.rating || 5.0).toFixed(1)} (${worker.reviewsCount})`
+                            : 'No reviews yet'}
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                        🏛️ {worker.cooperativeName}
+                      </p>
+                    </div>
                 </div>
 
                 <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between gap-2">

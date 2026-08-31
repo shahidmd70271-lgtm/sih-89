@@ -71,13 +71,22 @@ export interface CooperativeSociety {
 
 export interface Review {
   id: string;
-  customerName: string;
-  customerLocation: string;
+  customer_id?: string;
+  customerId?: string;
+  customerName?: string;
+  customerLocation?: string;
+  worker_id?: string;
+  workerId?: string;
+  booking_id?: string;
+  bookingId?: string;
   rating: number;
-  date: string;
-  comment: string;
-  serviceType: ServiceType;
-  verifiedBooking: boolean;
+  feedback?: string;
+  comment?: string;
+  date?: string;
+  created_at?: string;
+  updated_at?: string;
+  serviceType?: ServiceType;
+  verifiedBooking?: boolean;
 }
 
 export interface Certification {

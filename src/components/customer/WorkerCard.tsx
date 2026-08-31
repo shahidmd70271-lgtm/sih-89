@@ -123,13 +123,19 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({ worker, layout = 'grid' 
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
-            <div className="flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              <span>{worker.rating || 5.0}</span>
-              <span className="text-slate-500 font-normal text-[10px]">
-                ({worker.reviewsCount > 0 ? worker.reviewsCount : 'Attested'})
-              </span>
-            </div>
+            {worker.reviewsCount && worker.reviewsCount > 0 ? (
+              <div className="flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span>{Number(worker.rating || worker.safetyRating || 5.0).toFixed(1)}</span>
+                <span className="text-slate-500 font-normal text-[10px]">
+                  ({worker.reviewsCount} {worker.reviewsCount === 1 ? 'review' : 'reviews'})
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                <span>No reviews yet</span>
+              </div>
+            )}
 
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tight flex items-center gap-1 ${

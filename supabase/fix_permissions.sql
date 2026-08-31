@@ -82,6 +82,48 @@ CREATE POLICY "Customers can update their own record" ON public.customers FOR UP
 DROP POLICY IF EXISTS "Admins can manage customer records" ON public.customers;
 CREATE POLICY "Admins can manage customer records" ON public.customers FOR ALL USING (true);
 
+-- 5B. Ensure Reviews Table and Policies
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  worker_id TEXT NOT NULL REFERENCES public.workers(id) ON DELETE CASCADE,
+  booking_id TEXT NOT NULL UNIQUE REFERENCES public.bookings(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  feedback TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_worker_id ON public.reviews(worker_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_customer_id ON public.reviews(customer_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_booking_id ON public.reviews(booking_id);
+
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public and authenticated can view reviews" ON public.reviews;
+CREATE POLICY "Public and authenticated can view reviews" ON public.reviews FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Customers can review their own completed bookings" ON public.reviews;
+CREATE POLICY "Customers can review their own completed bookings" ON public.reviews FOR INSERT
+  WITH CHECK (
+    auth.uid() = customer_id
+    AND EXISTS (
+      SELECT 1 FROM public.bookings b
+      WHERE b.id = booking_id
+        AND b.customer_id = auth.uid()
+        AND (b.status = 'completed' OR b.status = 'Completed' OR b.status = 'paid')
+    )
+  );
+
+DROP POLICY IF EXISTS "Customers can update their own review" ON public.reviews;
+CREATE POLICY "Customers can update their own review" ON public.reviews FOR UPDATE USING (auth.uid() = customer_id);
+
+DROP POLICY IF EXISTS "Customers can delete their own review" ON public.reviews;
+CREATE POLICY "Customers can delete their own review" ON public.reviews FOR DELETE USING (auth.uid() = customer_id);
+
+DROP POLICY IF EXISTS "Admins can manage all reviews" ON public.reviews;
+CREATE POLICY "Admins can manage all reviews" ON public.reviews FOR ALL USING (true);
+
 -- 6. Trigger for Automatic Profile & Customer Creation on auth.users INSERT
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$

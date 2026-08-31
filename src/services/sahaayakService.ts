@@ -5,6 +5,7 @@ import {
   Customer,
   Payment,
   PaymentMode,
+  Review,
   ServiceType,
   Worker,
   WorkerDocument,
@@ -1310,6 +1311,179 @@ export class SahaayakService implements ISahaayakService {
     }
     return [];
   }
+
+  // ===================== REVIEWS & FEEDBACK =====================
+  async getReviews(): Promise<Review[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          return data.map(mapDbRowToReview);
+        }
+      } catch (err) {
+        console.warn('Supabase getReviews notice:', err);
+      }
+    }
+    return [];
+  }
+
+  async getWorkerReviews(workerId: string): Promise<Review[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('*')
+          .eq('worker_id', workerId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          return data.map(mapDbRowToReview);
+        }
+      } catch (err) {
+        console.warn('Supabase getWorkerReviews notice:', err);
+      }
+    }
+    return [];
+  }
+
+  async submitBookingReview(reviewData: {
+    bookingId: string;
+    workerId: string;
+    rating: number;
+    feedback?: string;
+    customerId?: string;
+    customerName?: string;
+  }): Promise<Review> {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Reviews cannot be stored without a backend.');
+    }
+
+    // 1. Get current authenticated user
+    const { data: { user } } = await supabase.auth.getUser();
+    const customerId = user?.id || reviewData.customerId;
+
+    if (!customerId) {
+      throw new Error('You must be logged in as a customer to submit a review.');
+    }
+
+    // 2. Validate rating range (1-5)
+    const rating = Math.min(5, Math.max(1, Math.round(reviewData.rating)));
+
+    // 3. Verify booking ownership and completion status in database
+    const { data: booking, error: bErr } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', reviewData.bookingId)
+      .maybeSingle();
+
+    if (bErr || !booking) {
+      throw new Error('Booking record not found.');
+    }
+
+    if (booking.customer_id && booking.customer_id !== customerId) {
+      throw new Error('You can only review your own bookings.');
+    }
+
+    const isCompleted =
+      booking.status === 'completed' ||
+      booking.status === 'Completed' ||
+      booking.status === 'paid';
+
+    if (!isCompleted) {
+      throw new Error('You can only submit a review after the service has been completed.');
+    }
+
+    // 4. Check for duplicate review on this booking
+    const { data: existingReview } = await supabase
+      .from('reviews')
+      .select('id')
+      .eq('booking_id', reviewData.bookingId)
+      .maybeSingle();
+
+    if (existingReview) {
+      throw new Error('A review has already been submitted for this booking. Only one review per booking is permitted.');
+    }
+
+    // 5. Insert review into public.reviews
+    const reviewPayload = {
+      customer_id: customerId,
+      worker_id: reviewData.workerId,
+      booking_id: reviewData.bookingId,
+      rating,
+      feedback: reviewData.feedback?.trim() || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: insertedReview, error: insErr } = await supabase
+      .from('reviews')
+      .insert([reviewPayload])
+      .select()
+      .single();
+
+    if (insErr) {
+      throw new Error(`Failed to save review: ${insErr.message}`);
+    }
+
+    // 6. Recalculate worker's real average rating and update public.workers
+    try {
+      const { data: allWorkerReviews } = await supabase
+        .from('reviews')
+        .select('rating')
+        .eq('worker_id', reviewData.workerId);
+
+      if (allWorkerReviews && allWorkerReviews.length > 0) {
+        const totalRating = allWorkerReviews.reduce((sum, r) => sum + Number(r.rating), 0);
+        const avgRating = Number((totalRating / allWorkerReviews.length).toFixed(1));
+        const reviewsCount = allWorkerReviews.length;
+
+        await supabase
+          .from('workers')
+          .update({
+            safety_rating: avgRating,
+            reviews_count: reviewsCount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', reviewData.workerId);
+      }
+    } catch (calcErr) {
+      console.warn('Worker rating recalculation notice:', calcErr);
+    }
+
+    return mapDbRowToReview(insertedReview);
+  }
 }
+
+export const mapDbRowToReview = (row: any): Review => {
+  return {
+    id: row.id,
+    customer_id: row.customer_id,
+    customerId: row.customer_id,
+    customerName: row.customer_name || 'Verified Citizen',
+    customerLocation: row.customer_location || 'Delhi NCR',
+    worker_id: row.worker_id,
+    workerId: row.worker_id,
+    booking_id: row.booking_id,
+    bookingId: row.booking_id,
+    rating: Number(row.rating) || 5,
+    feedback: row.feedback || row.comment || '',
+    comment: row.feedback || row.comment || '',
+    date: row.created_at
+      ? new Date(row.created_at).toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : 'Today',
+    created_at: row.created_at || new Date().toISOString(),
+    updated_at: row.updated_at,
+    serviceType: row.service_type || 'Plumbing',
+    verifiedBooking: true,
+  };
+};
 
 export const sahaayakService = new SahaayakService();

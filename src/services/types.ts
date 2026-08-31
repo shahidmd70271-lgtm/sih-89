@@ -60,4 +60,16 @@ export interface ISahaayakService {
   // Customers
   getCustomerById(id: string): Promise<Customer | null>;
   getCustomers(): Promise<Customer[]>;
+
+  // Reviews & Ratings
+  getReviews(): Promise<Review[]>;
+  getWorkerReviews(workerId: string): Promise<Review[]>;
+  submitBookingReview(reviewData: {
+    bookingId: string;
+    workerId: string;
+    rating: number;
+    feedback?: string;
+    customerId?: string;
+    customerName?: string;
+  }): Promise<Review>;
 }
