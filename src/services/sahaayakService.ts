@@ -80,12 +80,36 @@ export const mapDbRowToWorker = (row: any): Worker => {
     safetyRating: Number(row.safety_rating) || 5.0,
     insuranceCovered: row.insurance_covered !== false,
     emergencyAvailable: row.emergency_available !== false,
-    availabilitySlots: row.availability_slots || row.availabilitySlots || [
-      { id: 's1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
-      { id: 's2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
-      { id: 's3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
-      { id: 's4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
-    ],
+    availabilitySlots: (() => {
+      const raw = row.availability_slots || row.availabilitySlots;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.baseSlots)) {
+        return raw.baseSlots;
+      }
+      if (Array.isArray(raw) && raw.length > 0) {
+        return raw;
+      }
+      return [
+        { id: 'slot-1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
+        { id: 'slot-2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
+        { id: 'slot-3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
+        { id: 'slot-4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
+        { id: 'slot-5', startTime: '06:00 PM', endTime: '07:00 PM', label: '06:00 PM – 07:00 PM', isBooked: false, isAvailable: true },
+      ];
+    })(),
+    dateOverrides: (() => {
+      const raw = row.availability_slots || row.availabilitySlots;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.dateOverrides)) {
+        return raw.dateOverrides;
+      }
+      return row.date_overrides || row.dateOverrides || [];
+    })(),
+    workingDays: (() => {
+      const raw = row.availability_slots || row.availabilitySlots;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.workingDays)) {
+        return raw.workingDays;
+      }
+      return row.working_days || row.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    })(),
     reviews: row.reviews || [],
     dob: row.dob,
     gender: row.gender,
@@ -147,7 +171,17 @@ export const mapWorkerToDbRow = (w: Worker, authUserId?: string) => {
     bank_details: w.bankDetails || {},
     emergency_contact: w.emergencyContact || {},
     insurance_details: w.insuranceDetails || {},
-    availability_slots: w.availabilitySlots || [],
+    availability_slots: {
+      baseSlots: w.availabilitySlots || [
+        { id: 'slot-1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
+        { id: 'slot-2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
+        { id: 'slot-3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
+        { id: 'slot-4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
+        { id: 'slot-5', startTime: '06:00 PM', endTime: '07:00 PM', label: '06:00 PM – 07:00 PM', isBooked: false, isAvailable: true },
+      ],
+      dateOverrides: w.dateOverrides || [],
+      workingDays: w.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    },
     certifications: w.certifications || [],
     work_samples: w.workSamples || [],
     reviews: w.reviews || [],
@@ -636,6 +670,52 @@ export class SahaayakService implements ISahaayakService {
     const worker = this.workers.find((w) => w.id === workerId);
     if (worker) {
       worker.availability = isOnline ? 'Available Today' : 'Offline';
+    }
+  }
+
+  async updateWorkerAvailabilityConfig(
+    workerId: string,
+    config: {
+      workingDays?: string[];
+      availabilitySlots?: any[];
+      dateOverrides?: any[];
+    }
+  ): Promise<void> {
+    const worker = this.workers.find((w) => w.id === workerId);
+    if (worker) {
+      if (config.workingDays) worker.workingDays = config.workingDays;
+      if (config.availabilitySlots) worker.availabilitySlots = config.availabilitySlots;
+      if (config.dateOverrides) worker.dateOverrides = config.dateOverrides;
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload: any = {
+          availability_slots: {
+            baseSlots: config.availabilitySlots || worker?.availabilitySlots || [
+              { id: 'slot-1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
+              { id: 'slot-2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
+              { id: 'slot-3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
+              { id: 'slot-4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
+              { id: 'slot-5', startTime: '06:00 PM', endTime: '07:00 PM', label: '06:00 PM – 07:00 PM', isBooked: false, isAvailable: true },
+            ],
+            dateOverrides: config.dateOverrides || worker?.dateOverrides || [],
+            workingDays: config.workingDays || worker?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+          },
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase
+          .from('workers')
+          .update(payload)
+          .eq('id', workerId);
+
+        if (error) {
+          console.warn('[updateWorkerAvailabilityConfig] Supabase update warning:', error.message);
+        }
+      } catch (err) {
+        console.warn('[updateWorkerAvailabilityConfig] Error updating worker availability in Supabase:', err);
+      }
     }
   }
 

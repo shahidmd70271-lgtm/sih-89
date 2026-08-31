@@ -99,6 +99,16 @@ export interface AvailabilitySlot {
   bookingId?: string;
   isAvailable: boolean; // toggleable by worker
   isPending?: boolean; // when customer requested but worker has not yet accepted
+  isOverridden?: boolean; // true if this slot has a specific date override
+}
+
+export interface DateSlotOverride {
+  date: string; // YYYY-MM-DD format e.g. '2026-09-01'
+  slotId: string; // e.g. 'slot-1'
+  startTime?: string;
+  endTime?: string;
+  isAvailable: boolean; // false if disabled for that date, true if enabled
+  updatedAt?: string;
 }
 
 export interface WorkerDocument {
@@ -163,6 +173,7 @@ export interface Worker {
   insuranceCovered: boolean;
   emergencyAvailable: boolean;
   availabilitySlots?: AvailabilitySlot[];
+  dateOverrides?: DateSlotOverride[];
   workingDays?: string[];
   reviews: Review[];
   // Extended Registration and Verification Fields

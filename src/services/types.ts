@@ -30,6 +30,14 @@ export interface ISahaayakService {
   rejectWorkerApplication(workerId: string, reason?: string): Promise<void>;
   removeWorker(workerId: string, adminId?: string, reason?: string): Promise<Worker>;
   updateWorkerOnlineStatus(workerId: string, isOnline: boolean): Promise<void>;
+  updateWorkerAvailabilityConfig(
+    workerId: string,
+    config: {
+      workingDays?: string[];
+      availabilitySlots?: any[];
+      dateOverrides?: any[];
+    }
+  ): Promise<void>;
   
   // Bookings
   getBookings(): Promise<Booking[]>;

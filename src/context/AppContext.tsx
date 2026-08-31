@@ -13,11 +13,13 @@ import {
   PaymentMode,
   Payment,
   CooperativeSociety,
+  DateSlotOverride,
 } from '../types';
 import { translate } from '../translations';
 import { authService } from '../services/authService';
 import { sahaayakService } from '../services/sahaayakService';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { computeWorkerSlotsForDate, toggleSlotForDate } from '../utils/availabilityUtils';
 
 interface AppContextType {
   // Auth state
@@ -118,6 +120,8 @@ interface AppContextType {
   openEmergencySOS: (preselectedService?: ServiceType) => void;
   toggleWorkerSlot: (workerId: string, slotId: string) => void;
   setWorkerSlotAvailability: (workerId: string, slotId: string, isAvailable: boolean) => void;
+  toggleWorkerDateSlot: (workerId: string, dateString: string, slotId: string) => Promise<void>;
+  setWorkerWorkingDays: (workerId: string, days: string[]) => Promise<void>;
 
   // Job & Payment Completion
   recordPaymentAndCompleteJob: (
@@ -587,16 +591,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const toggleWorkerSlot = (workerId: string, slotId: string) => {
+  const toggleWorkerDateSlot = async (workerId: string, dateString: string, slotId: string) => {
+    let updatedWorker: Worker | null = null;
+
     setWorkers((prev) =>
       prev.map((w) => {
         if (w.id !== workerId) return w;
-        const updatedSlots = (w.availabilitySlots || []).map((s) =>
-          s.id === slotId ? { ...s, isAvailable: !s.isAvailable } : s
-        );
-        return { ...w, availabilitySlots: updatedSlots };
+        const currentSlots = computeWorkerSlotsForDate(w, dateString, bookings);
+        const currentSlot = currentSlots.find((s) => s.id === slotId);
+        const currentIsAvailable = currentSlot ? currentSlot.isAvailable : true;
+        const newOverrides = toggleSlotForDate(w.dateOverrides, dateString, slotId, currentIsAvailable);
+        updatedWorker = { ...w, dateOverrides: newOverrides };
+        return updatedWorker;
       })
     );
+
+    if (updatedWorker) {
+      await sahaayakService.updateWorkerAvailabilityConfig(workerId, {
+        dateOverrides: (updatedWorker as Worker).dateOverrides,
+        workingDays: (updatedWorker as Worker).workingDays,
+        availabilitySlots: (updatedWorker as Worker).availabilitySlots,
+      });
+    }
+  };
+
+  const setWorkerWorkingDays = async (workerId: string, days: string[]) => {
+    setWorkers((prev) =>
+      prev.map((w) => {
+        if (w.id !== workerId) return w;
+        return { ...w, workingDays: days };
+      })
+    );
+
+    await sahaayakService.updateWorkerAvailabilityConfig(workerId, {
+      workingDays: days,
+    });
+  };
+
+  const toggleWorkerSlot = (workerId: string, slotId: string) => {
+    // Default backward compatible helper toggling for Today
+    toggleWorkerDateSlot(workerId, 'Today', slotId);
   };
 
   const setWorkerSlotAvailability = (workerId: string, slotId: string, isAvailable: boolean) => {
@@ -957,6 +991,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openEmergencySOS,
         toggleWorkerSlot,
         setWorkerSlotAvailability,
+        toggleWorkerDateSlot,
+        setWorkerWorkingDays,
         recordPaymentAndCompleteJob,
         confirmPaymentReceived,
         getWorkerEarnings,

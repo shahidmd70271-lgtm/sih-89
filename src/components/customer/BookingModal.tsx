@@ -19,6 +19,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Booking, AvailabilitySlot } from '../../types';
 import { OpenStreetMapView, LocationCoordinates } from '../maps/OpenStreetMapView';
+import { computeWorkerSlotsForDate } from '../../utils/availabilityUtils';
 
 export const BookingModal: React.FC = () => {
   const {
@@ -42,16 +43,6 @@ export const BookingModal: React.FC = () => {
 
   if (!isBookingModalOpen || !selectedWorker) return null;
 
-  const defaultSlots: AvailabilitySlot[] = selectedWorker.availabilitySlots && selectedWorker.availabilitySlots.length > 0
-    ? selectedWorker.availabilitySlots
-    : [
-        { id: 'slot-1', startTime: '10:00 AM', endTime: '11:00 AM', label: '10:00 AM – 11:00 AM', isBooked: false, isAvailable: true },
-        { id: 'slot-2', startTime: '12:00 PM', endTime: '01:00 PM', label: '12:00 PM – 01:00 PM', isBooked: false, isAvailable: true },
-        { id: 'slot-3', startTime: '02:00 PM', endTime: '03:00 PM', label: '02:00 PM – 03:00 PM', isBooked: false, isAvailable: true },
-        { id: 'slot-4', startTime: '04:00 PM', endTime: '05:00 PM', label: '04:00 PM – 05:00 PM', isBooked: false, isAvailable: true },
-        { id: 'slot-5', startTime: '06:00 PM', endTime: '07:00 PM', label: '06:00 PM – 07:00 PM', isBooked: false, isAvailable: true },
-      ];
-
   const formattedDate =
     dateType === 'today'
       ? 'Today'
@@ -59,21 +50,8 @@ export const BookingModal: React.FC = () => {
       ? 'Tomorrow'
       : customDate;
 
-  // Real slot booked status determined from actual database bookings for this worker & date
-  const activeSlots = defaultSlots.map((slot) => {
-    const isBookedInDb = bookings.some(
-      (b) =>
-        b.workerId === selectedWorker.id &&
-        (b.date === formattedDate || b.date.includes(formattedDate)) &&
-        (b.slotId === slot.id || b.timeSlot === slot.label) &&
-        b.status !== 'rejected' &&
-        b.status !== 'cancelled'
-    );
-    return {
-      ...slot,
-      isBooked: isBookedInDb || (slot.isBooked && !slot.isAvailable),
-    };
-  });
+  // Real date-specific slot availability computed from weekly schedule, date overrides & database bookings
+  const activeSlots = computeWorkerSlotsForDate(selectedWorker, formattedDate, bookings);
 
   const selectedSlot = activeSlots.find((s) => s.id === selectedSlotId) || activeSlots.find((s) => !s.isBooked && s.isAvailable) || activeSlots[0];
 
