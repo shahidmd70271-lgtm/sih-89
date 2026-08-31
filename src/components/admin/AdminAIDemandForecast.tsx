@@ -485,7 +485,7 @@ export const AdminAIDemandForecast: React.FC = () => {
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                     <span>Recommended Available Shramiks ({item.recommendedWorkers.length})</span>
-                    <span className="text-[11px] text-slate-500 font-normal">Sorted by rating & experience</span>
+                    <span className="text-[11px] text-slate-500 font-normal">Sorted by trade experience</span>
                   </div>
 
                   {item.recommendedWorkers.length > 0 ? (
@@ -509,7 +509,7 @@ export const AdminAIDemandForecast: React.FC = () => {
                                   <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
                                 </p>
                                 <p className="text-[10px] text-slate-500">
-                                  ⭐ {w.rating || 5.0} • {w.experienceYears || 3} yrs exp • {w.phone || 'Available'}
+                                  {w.experienceYears || 3} yrs exp • {w.phone || 'Available'}
                                 </p>
                               </div>
                             </div>

@@ -34,16 +34,34 @@ export const WorkerDashboardOverview: React.FC = () => {
     isWorkerOnline,
     setIsWorkerOnline,
     currentWorker,
+    authLoading,
+    setIsWorkerAuthModalOpen,
     t,
   } = useApp();
 
   const worker = currentWorker;
 
   if (!worker) {
+    if (authLoading) {
+      return (
+        <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-3 animate-pulse">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 mx-auto animate-spin" />
+          <h3 className="text-sm font-bold text-slate-700">Restoring Worker Profile...</h3>
+          <p className="text-xs text-slate-400">Verifying session credentials from cooperative network...</p>
+        </div>
+      );
+    }
+
     return (
       <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
         <h3 className="text-lg font-bold text-slate-900">No Worker Profile Found</h3>
-        <p className="text-xs text-slate-500">Please register or log in with your worker mobile number.</p>
+        <p className="text-xs text-slate-500">Please register or log in with your worker credentials.</p>
+        <button
+          onClick={() => setIsWorkerAuthModalOpen(true)}
+          className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all cursor-pointer"
+        >
+          Sign In as Worker
+        </button>
       </div>
     );
   }
@@ -232,17 +250,20 @@ export const WorkerDashboardOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* Rating */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+        {/* Cooperative Welfare & Insurance */}
+        <div
+          onClick={() => setActiveView('worker-welfare')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs cursor-pointer hover:border-emerald-400 transition-colors"
+        >
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              {t('citizenRating')}
+              {t('esiInsurance')}
             </span>
-            <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-2xl font-black text-slate-900">{worker.rating || 5.0}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">
-            {t('basedOnAudits', { count: worker.reviewsCount || 0 })}
+          <div className="text-2xl font-black text-slate-900">₹5 Lakh</div>
+          <div className="text-[11px] text-emerald-700 font-semibold mt-1">
+            Active NLCF Protection
           </div>
         </div>
       </div>

@@ -21,19 +21,20 @@ async function testWorkerBookingRequestFlow() {
   const timestamp = Date.now();
 
   try {
-    // 1. Fetch worker "shahid" from Supabase
-    console.log('\n[1/7] Fetching worker "shahid" from Supabase...');
+    // 1. Fetch active approved worker from Supabase
+    console.log('\n[1/7] Fetching approved worker from Supabase...');
     const { data: workers, error: wErr } = await supabase
       .from('workers')
       .select('*')
-      .eq('name', 'shahid');
+      .eq('approval_status', 'approved')
+      .limit(1);
 
     if (wErr || !workers || workers.length === 0) {
-      throw new Error(`Worker "shahid" not found in Supabase: ${wErr?.message}`);
+      throw new Error(`Approved worker not found in Supabase: ${wErr?.message}`);
     }
 
     const workerShahid = workers[0];
-    console.log('   Worker "shahid" profile in database:', {
+    console.log('   Worker profile in database:', {
       id: workerShahid.id,
       profile_id: workerShahid.profile_id,
       name: workerShahid.name,

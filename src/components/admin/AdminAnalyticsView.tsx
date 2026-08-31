@@ -61,10 +61,10 @@ export const AdminAnalyticsView: React.FC = () => {
 
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            {t('citizenSatisfactionIndex')}
+            Verified Service Success
           </span>
-          <div className="text-3xl font-black text-amber-900 font-mono">4.86 / 5.0</div>
-          <p className="text-xs text-slate-500">{t('basedOnVerifiedRatings')}</p>
+          <div className="text-3xl font-black text-emerald-800 font-mono">98.6%</div>
+          <p className="text-xs text-slate-500">Successful cooperative bookings</p>
         </div>
 
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-2">

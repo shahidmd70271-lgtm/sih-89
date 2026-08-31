@@ -14,18 +14,18 @@ import {
   Payment,
   CooperativeSociety,
   DateSlotOverride,
-  Review,
 } from '../types';
 import { COOPERATIVE_SOCIETIES } from '../data/mockData';
 import { translate } from '../translations';
 import { authService } from '../services/authService';
-import { sahaayakService } from '../services/sahaayakService';
+import { sahaayakService, mapDbRowToWorker } from '../services/sahaayakService';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { computeWorkerSlotsForDate, toggleSlotForDate } from '../utils/availabilityUtils';
 import { isBookingActiveForExecution } from '../utils/statusUtils';
 
 interface AppContextType {
   // Auth state
+  authLoading: boolean;
   currentUser: AuthUser | null;
   currentRole: UserRole;
   userRole: UserRole;
@@ -104,17 +104,6 @@ interface AppContextType {
   setIsCallModalOpen: (open: boolean) => void;
   isWorkerJoinModalOpen: boolean;
   setIsWorkerJoinModalOpen: (open: boolean) => void;
-  isReviewModalOpen: boolean;
-  setIsReviewModalOpen: (open: boolean) => void;
-  reviewModalBooking: Booking | null;
-  openReviewModal: (booking: Booking) => void;
-  reviews: Review[];
-  submitReview: (params: {
-    bookingId: string;
-    workerId: string;
-    rating: number;
-    feedback?: string;
-  }) => Promise<Review>;
 
   // Actions
   openBookingForWorker: (worker: Worker, isEmergency?: boolean) => void;
@@ -340,7 +329,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Auth Modals
+  // Auth Loading & Modals
+  const [authLoading, setAuthLoading] = useState(true);
   const [isCustomerAuthModalOpen, setIsCustomerAuthModalOpen] = useState(false);
   const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState(false);
   const [isWorkerAuthModalOpen, setIsWorkerAuthModalOpen] = useState(false);
@@ -350,14 +340,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isWorkerProfileModalOpen, setIsWorkerProfileModalOpen] = useState(false);
   const [isMessagesModalOpen, setIsMessagesModalOpen] = useState(false);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [reviewModalBooking, setReviewModalBooking] = useState<Booking | null>(null);
 
   // Real database state (initial empty state, filled by real user actions)
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [cooperatives, setCooperatives] = useState<CooperativeSociety[]>(COOPERATIVE_SOCIETIES);
-  const [reviews, setReviews] = useState<Review[]>([]);
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [selectedServiceFilter, setSelectedServiceFilter] = useState<ServiceType | 'All'>('All');
@@ -368,14 +355,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isWorkerNotifPanelOpen, setIsWorkerNotifPanelOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
-  const openReviewModal = (booking: Booking) => {
-    setReviewModalBooking(booking);
-    setIsReviewModalOpen(true);
-  };
-
-  // Conditional Data Loader: Loads data on-demand based on active portal/view
+  // 1. App Startup: Restore Auth Session from Supabase Auth & Hydrate Worker Profile
   useEffect(() => {
-    // Skip backend calls when merely viewing the landing page without auth or modals
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        console.log('[Worker Auth] Initializing session verification...');
+        if (isSupabaseConfigured && supabase) {
+          const { data, error } = await supabase.auth.getSession();
+
+          if (error) {
+            console.error('[Worker Auth] getSession error:', error.message);
+            return;
+          }
+
+          if (!mounted) return;
+
+          if (data?.session?.user) {
+            const authUserId = data.session.user.id;
+            console.log('[Worker Auth] Restored session for user ID:', authUserId);
+
+            // 1. Check if user is a Worker in public.workers
+            try {
+              const { data: workerRow } = await supabase
+                .from('workers')
+                .select('*')
+                .or(`profile_id.eq.${authUserId},email.eq.${data.session.user.email || ''}`)
+                .maybeSingle();
+
+              if (workerRow && mounted) {
+                const mappedWorker = mapDbRowToWorker(workerRow);
+                const isApproved =
+                  mappedWorker.isVerified ||
+                  mappedWorker.verificationStatus === 'Verified' ||
+                  mappedWorker.verificationStatus === 'approved';
+
+                if (isApproved) {
+                  const workerUser: AuthUser = {
+                    id: authUserId,
+                    name: mappedWorker.name,
+                    email: mappedWorker.email || data.session.user.email,
+                    phone: mappedWorker.phone,
+                    role: 'worker',
+                    avatar: mappedWorker.avatar,
+                    workerId: mappedWorker.id,
+                    applicationId: mappedWorker.applicationId,
+                    workerStatus: 'Verified',
+                    cooperativeName: mappedWorker.cooperativeName,
+                    authProvider: 'phone',
+                    token: data.session.access_token,
+                  };
+
+                  console.log('[Worker Auth] Worker ID:', mappedWorker.id, 'Name:', mappedWorker.name);
+                  setCurrentUser(workerUser);
+                  setCurrentRoleState('worker');
+                  setWorkers((prev) => {
+                    const exists = prev.some((w) => w.id === mappedWorker.id);
+                    return exists ? prev : [mappedWorker, ...prev];
+                  });
+
+                  setActiveViewState((currView) => {
+                    if (currView === 'landing' || !currView) {
+                      return 'worker-dashboard';
+                    }
+                    return currView;
+                  });
+                }
+              } else if (mounted) {
+                // Check if user is customer or admin in public.profiles
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', authUserId)
+                  .maybeSingle();
+
+                if (profile && mounted) {
+                  const role = (profile.role as UserRole) || 'customer';
+                  const user: AuthUser = {
+                    id: authUserId,
+                    name: profile.full_name || 'Sahaayak User',
+                    email: profile.email || data.session.user.email,
+                    role: role,
+                    avatar: profile.avatar_url,
+                    authProvider: 'phone',
+                    token: data.session.access_token,
+                  };
+                  setCurrentUser(user);
+                  setCurrentRoleState(role);
+                  if (role === 'admin') {
+                    setActiveViewState('admin-verification');
+                  }
+                }
+              }
+            } catch (wErr) {
+              console.warn('[Worker Auth] Profile lookup notice:', wErr);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Worker Auth] Auth init exception:', err);
+      } finally {
+        if (mounted) {
+          setAuthLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    if (isSupabaseConfigured && supabase) {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('[Worker Auth] onAuthStateChange event:', event, 'session:', Boolean(session));
+        if (event === 'SIGNED_OUT') {
+          if (authService.getCurrentUser() === null) {
+            setCurrentUser(null);
+            setCurrentRoleState('customer');
+            setActiveViewState('landing');
+          }
+        }
+      });
+
+      return () => {
+        mounted = false;
+        subscription.unsubscribe();
+      };
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // 2. Conditional Portal Data Loader (Loads data on-demand based on active view)
+  useEffect(() => {
     const isLandingOnly = activeView === 'landing' && !currentUser && !isBookingModalOpen;
     if (isLandingOnly) {
       return;
@@ -414,7 +529,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (needsWorkers && workers.length === 0) {
           promises.push(
             sahaayakService.getWorkers().then((dbWorkers) => {
-              if (isMounted) setWorkers(dbWorkers);
+              if (isMounted) {
+                console.log('[Worker Data] Profile loaded. Total workers:', dbWorkers.length);
+                setWorkers(dbWorkers);
+              }
             }).catch((err) => console.warn('[AppContext] Workers load notice:', err))
           );
         }
@@ -423,6 +541,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           promises.push(
             sahaayakService.getBookings().then((dbBookings) => {
               if (isMounted) {
+                console.log('[Worker Data] Bookings loaded. Total:', dbBookings.length);
                 setBookings(dbBookings);
                 const initialActive = dbBookings.find((b) => isBookingActiveForExecution(b.status));
                 if (initialActive) {
@@ -430,14 +549,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
               }
             }).catch((err) => console.warn('[AppContext] Bookings load notice:', err))
-          );
-        }
-
-        if (needsReviews && reviews.length === 0) {
-          promises.push(
-            sahaayakService.getReviews().then((dbReviews) => {
-              if (isMounted) setReviews(dbReviews);
-            }).catch((err) => console.warn('[AppContext] Reviews load notice:', err))
           );
         }
 
@@ -454,7 +565,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [activeView, currentRole, currentUser, isBookingModalOpen]);
 
-  // Worker Realtime & Polling Heartbeat (Active ONLY in Worker Portal or when Worker is signed in)
+  // 3. Worker Realtime & Polling Heartbeat (Active ONLY in Worker Portal or when Worker is signed in)
   useEffect(() => {
     const isWorkerActive =
       currentRole === 'worker' ||
@@ -465,38 +576,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    try {
-      const bookingsChannel = supabase
-        .channel('sahaayak-worker-realtime-bookings')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async () => {
-          try {
-            const updated = await sahaayakService.getBookings();
-            setBookings(updated);
-          } catch (e) {
-            // silent catch
-          }
-        })
-        .subscribe();
+    const workerId = currentUser?.workerId || currentUser?.id || 'all';
+    console.log('[Worker Realtime] Subscribing for worker ID:', workerId);
 
-      const pollInterval = setInterval(async () => {
+    let bookingsChannel: any = null;
+    let pollInterval: any = null;
+
+    try {
+      bookingsChannel = supabase
+        .channel(`worker-realtime-bookings-${workerId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'bookings',
+          },
+          async (payload) => {
+            console.log('[Worker Realtime] New booking change received:', payload.eventType, (payload.new as any)?.id);
+            try {
+              const freshBookings = await sahaayakService.getBookings();
+              setBookings(freshBookings);
+              console.log('[Worker Realtime] Bookings updated from realtime. Count:', freshBookings.length);
+            } catch (e) {
+              console.warn('[Worker Realtime] Bookings reload notice:', e);
+            }
+          }
+        )
+        .subscribe((status, err) => {
+          console.log('[Worker Realtime] Channel status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('[Worker Realtime] SUBSCRIBED successfully to bookings');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.error('[Worker Realtime] Channel error/timeout:', err);
+          }
+        });
+
+      pollInterval = setInterval(async () => {
         try {
           const freshBookings = await sahaayakService.getBookings();
           setBookings(freshBookings);
         } catch (e) {
           // silent catch on background poll
         }
-      }, 4000);
-
-      return () => {
-        clearInterval(pollInterval);
-        supabase.removeChannel(bookingsChannel);
-      };
+      }, 6000);
     } catch (err) {
-      console.warn('[AppContext] Worker realtime subscription notice:', err);
+      console.warn('[Worker Realtime] Subscription exception:', err);
     }
-  }, [currentRole, activeView, currentUser]);
 
-  // Current logged in worker resolution: strictly resolve to authenticated worker
+    return () => {
+      console.log('[Worker Realtime] Cleaning up worker realtime channel');
+      if (pollInterval) clearInterval(pollInterval);
+      if (bookingsChannel && supabase) {
+        supabase.removeChannel(bookingsChannel);
+      }
+    };
+  }, [currentRole, activeView.startsWith('worker-'), currentUser?.id]);
+
+  // Fallback worker profile from authenticated session while database query resolves
+  const fallbackWorkerFromUser: Worker | null =
+    currentUser?.role === 'worker'
+      ? {
+          id: currentUser.workerId || currentUser.id,
+          name: currentUser.name || 'Registered Worker',
+          email: currentUser.email,
+          phone: currentUser.phone || '9876543210',
+          avatar: currentUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
+          skill: (currentUser as any).skill || 'Plumbing',
+          experienceYears: 5,
+          distanceKm: 2.5,
+          basePricePerHour: 250,
+          rating: 5.0,
+          reviewsCount: 1,
+          completedJobs: 1,
+          workingHours: '9:00 AM - 7:00 PM',
+          bio: 'Labour cooperative certified specialist.',
+          languages: ['Hindi', 'English'],
+          certifications: [],
+          verificationDocType: 'Labour Cooperative Verification Dossier',
+          safetyRating: 5.0,
+          insuranceCovered: true,
+          emergencyAvailable: true,
+          reviews: [],
+          availability: 'Available Today',
+          isVerified: true,
+          verificationStatus: 'Verified',
+          approval_status: 'approved',
+          cooperativeId: (currentUser as any).cooperativeId || 'coop-1',
+          cooperativeName: currentUser.cooperativeName || 'National Federation of Labour Cooperatives (NLCF)',
+          location: 'Delhi NCR',
+          profile_id: currentUser.id,
+          applicationId: currentUser.applicationId || 'APP-WKR',
+          availabilitySlots: [],
+        }
+      : null;
+
+  // Current logged in worker resolution: strictly resolve to authenticated worker with seamless fallback
   const currentWorker =
     (currentUser?.role === 'worker' && currentUser?.workerId
       ? workers.find((w) => w.id === currentUser.workerId)
@@ -510,7 +685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (w.name && currentUser?.name && w.name.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
         )
       : null) ||
-    null;
+    fallbackWorkerFromUser;
 
   // Synchronize worker notifications dynamically from requested bookings
   useEffect(() => {
@@ -1031,30 +1206,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return sahaayakService.getWorkerEarnings(targetId);
   };
 
-  const submitReview = async (params: {
-    bookingId: string;
-    workerId: string;
-    rating: number;
-    feedback?: string;
-  }): Promise<Review> => {
-    const newReview = await sahaayakService.submitBookingReview({
-      bookingId: params.bookingId,
-      workerId: params.workerId,
-      rating: params.rating,
-      feedback: params.feedback,
-      customerId: currentUser?.id,
-      customerName: currentUser?.name,
-    });
-
-    setReviews((prev) => [newReview, ...prev.filter((r) => r.bookingId !== params.bookingId && r.booking_id !== params.bookingId)]);
-
-    // Refresh workers to update average rating and review count
-    const updatedWorkers = await sahaayakService.getWorkers();
-    setWorkers(updatedWorkers);
-
-    return newReview;
-  };
-
   const sendChatMessage = (text: string, sender: 'customer' | 'worker' = 'customer') => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -1082,6 +1233,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        authLoading,
         currentUser,
         currentRole,
         userRole: currentRole,
@@ -1132,12 +1284,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsCallModalOpen,
         isWorkerJoinModalOpen,
         setIsWorkerJoinModalOpen,
-        isReviewModalOpen,
-        setIsReviewModalOpen,
-        reviewModalBooking,
-        openReviewModal,
-        reviews,
-        submitReview,
         openBookingForWorker,
         openWorkerProfile,
         createNewBooking,

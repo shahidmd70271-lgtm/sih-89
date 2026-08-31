@@ -105,8 +105,8 @@ export const AdminCooperativeSocieties: React.FC = () => {
                 </div>
               </div>
 
-              <span className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                ⭐ {coop.rating || 5.0}
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                ✓ Verified
               </span>
             </div>
 

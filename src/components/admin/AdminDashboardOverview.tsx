@@ -203,8 +203,8 @@ export const AdminDashboardOverview: React.FC = () => {
                 </div>
 
                 <div>
-                  <span className="text-[10px] text-slate-400 block">{t('trustScore')}</span>
-                  <strong className="text-amber-900 font-bold">⭐ {coop.rating}</strong>
+                  <span className="text-[10px] text-slate-400 block">Federation Status</span>
+                  <strong className="text-emerald-800 font-bold">✓ Govt Certified</strong>
                 </div>
               </div>
             </div>

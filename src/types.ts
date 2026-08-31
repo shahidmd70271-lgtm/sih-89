@@ -149,8 +149,8 @@ export interface Worker {
   avatar: string;
   skill: ServiceType;
   secondarySkills?: ServiceType[];
-  rating: number;
-  reviewsCount: number;
+  rating?: number;
+  reviewsCount?: number;
   experienceYears: number;
   distanceKm: number;
   basePricePerHour: number;
@@ -178,13 +178,13 @@ export interface Worker {
   removalReason?: string;
   verificationDocType: string;
   verificationDate?: string;
-  safetyRating: number;
+  safetyRating?: number;
   insuranceCovered: boolean;
   emergencyAvailable: boolean;
   availabilitySlots?: AvailabilitySlot[];
   dateOverrides?: DateSlotOverride[];
   workingDays?: string[];
-  reviews: Review[];
+  reviews?: Review[];
   // Extended Registration and Verification Fields
   applicationId?: string;
   appliedDate?: string;

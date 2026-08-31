@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Info,
   CreditCard,
-  Star,
   Award,
   Sparkles,
   CalendarCheck,
@@ -271,7 +270,7 @@ export const BookingModal: React.FC = () => {
               </p>
             </div>
 
-            {/* WORKER DETAILS SUMMARY CARD (User requirement: Worker name, Skill, Rating, Experience, Verification status, Service price, Location/distance) */}
+            {/* WORKER DETAILS SUMMARY CARD (Worker name, Skill, Experience, Verification status, Service price, Location/distance) */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
               <div className="flex items-start gap-3.5">
                 <img
@@ -294,12 +293,7 @@ export const BookingModal: React.FC = () => {
                   </p>
 
                   <div className="flex items-center gap-3 text-xs text-slate-600 pt-1 flex-wrap">
-                    <span className="flex items-center gap-1 font-semibold text-amber-600">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      {selectedWorker.rating} ({selectedWorker.reviewsCount})
-                    </span>
-                    <span>•</span>
-                    <span className="font-medium text-slate-700">
+                    <span className="font-semibold text-slate-800">
                       {selectedWorker.experienceYears} yrs experience
                     </span>
                     <span>•</span>

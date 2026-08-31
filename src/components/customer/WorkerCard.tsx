@@ -64,9 +64,6 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({ worker, layout = 'grid' 
             </p>
 
             <div className="flex items-center gap-3 sm:gap-4 mt-2 text-xs font-semibold">
-              <span className="text-amber-500 flex items-center gap-0.5">
-                ★ {worker.rating} <span className="text-slate-400 font-normal text-[10px]">({worker.reviewsCount})</span>
-              </span>
               <span className="text-slate-400">{t('distanceAwayText', { distance: worker.distanceKm })}</span>
               <span className={isAvailableNow ? 'text-emerald-600' : 'text-slate-400'}>
                 {isAvailableNow ? `● ${t('availableNow')}` : `○ ${t('busy')}`}
@@ -75,7 +72,7 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({ worker, layout = 'grid' 
           </div>
         </div>
 
-        {/* Right: Rating, Price & Action */}
+        {/* Right: Price & Action */}
         <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100 gap-2 shrink-0">
           <div className="text-right">
             <p className="text-sm font-bold text-slate-800">₹{worker.basePricePerHour} <span className="text-xs font-normal text-slate-500">/hr</span></p>
@@ -104,7 +101,7 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({ worker, layout = 'grid' 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-400 transition-all duration-200 p-5 flex flex-col justify-between group">
       <div>
-        {/* Top: Avatar, Badges & Rating */}
+        {/* Top: Avatar, Badges */}
         <div className="flex items-start justify-between gap-3 mb-3.5">
           <div className="relative">
             <img
@@ -123,19 +120,6 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({ worker, layout = 'grid' 
           </div>
 
           <div className="flex flex-col items-end gap-1.5">
-            {worker.reviewsCount && worker.reviewsCount > 0 ? (
-              <div className="flex items-center gap-1 text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
-                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                <span>{Number(worker.rating || worker.safetyRating || 5.0).toFixed(1)}</span>
-                <span className="text-slate-500 font-normal text-[10px]">
-                  ({worker.reviewsCount} {worker.reviewsCount === 1 ? 'review' : 'reviews'})
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
-                <span>No reviews yet</span>
-              </div>
-            )}
 
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tight flex items-center gap-1 ${

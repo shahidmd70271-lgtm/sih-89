@@ -1919,7 +1919,7 @@ export const WorkerRegistrationDrawer: React.FC<WorkerRegistrationDrawerProps> =
                   />
                   <div className="space-y-0.5">
                     <span className="text-xs text-slate-700 leading-relaxed font-medium block">
-                      I agree that my verified professional profile (name, photo, trade skill, rating, and approximate area) will be displayed to customers upon cooperative approval. <span className="text-red-500">*</span>
+                      I agree that my verified professional profile (name, photo, trade skill, and approximate area) will be displayed to customers upon cooperative approval. <span className="text-red-500">*</span>
                     </span>
                     {attemptedSteps[7] && !consentPublicProfile && (
                       <span className="text-[10px] text-red-600 font-bold block">

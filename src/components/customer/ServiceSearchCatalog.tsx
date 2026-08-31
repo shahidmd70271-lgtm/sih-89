@@ -32,7 +32,7 @@ import {
 } from '../../utils/mapUtils';
 import { OpenStreetMapView } from '../maps/OpenStreetMapView';
 
-type SortOption = 'nearest' | 'highest-rated' | 'lowest-price' | 'available-now';
+type SortOption = 'nearest' | 'most-experienced' | 'lowest-price' | 'available-now';
 
 export const ServiceSearchCatalog: React.FC = () => {
   const {
@@ -52,7 +52,6 @@ export const ServiceSearchCatalog: React.FC = () => {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [maxDistance, setMaxDistance] = useState<number>(15); // in km
-  const [minRating, setMinRating] = useState<number>(0);
   const [maxPrice, setMaxPrice] = useState<number>(600);
   const [availabilityFilter, setAvailabilityFilter] = useState<'All' | 'Available Now' | 'Available Today'>('All');
   const [sortBy, setSortBy] = useState<SortOption>('nearest');
@@ -94,7 +93,6 @@ export const ServiceSearchCatalog: React.FC = () => {
     setSelectedServiceFilter('All');
     setSearchQuery('');
     setMaxDistance(15);
-    setMinRating(0);
     setMaxPrice(600);
     setAvailabilityFilter('All');
     setSortBy('nearest');
@@ -146,8 +144,8 @@ export const ServiceSearchCatalog: React.FC = () => {
       .sort((a, b) => {
         // Primary: Distance ascending (nearest first)
         if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
-        // Secondary: Rating descending
-        return (b.rating || 5.0) - (a.rating || 5.0);
+        // Secondary: Experience descending
+        return (b.experienceYears || 3) - (a.experienceYears || 3);
       })
       .slice(0, 4);
   }, [workersWithRealDistance, selectedServiceFilter]);
@@ -177,9 +175,6 @@ export const ServiceSearchCatalog: React.FC = () => {
         // Real distance filter
         if (w.distanceKm > maxDistance) return false;
 
-        // Rating filter
-        if (w.rating < minRating) return false;
-
         // Price filter
         if (w.basePricePerHour > maxPrice) return false;
 
@@ -201,8 +196,8 @@ export const ServiceSearchCatalog: React.FC = () => {
         switch (sortBy) {
           case 'nearest':
             return a.distanceKm - b.distanceKm;
-          case 'highest-rated':
-            return b.rating - a.rating;
+          case 'most-experienced':
+            return (b.experienceYears || 0) - (a.experienceYears || 0);
           case 'lowest-price':
             return a.basePricePerHour - b.basePricePerHour;
           case 'available-now':
@@ -218,7 +213,6 @@ export const ServiceSearchCatalog: React.FC = () => {
     selectedServiceFilter,
     searchQuery,
     maxDistance,
-    minRating,
     maxPrice,
     availabilityFilter,
     sortBy,
@@ -426,11 +420,7 @@ export const ServiceSearchCatalog: React.FC = () => {
                         <ServiceIcon name={worker.skill} className="w-3 h-3 text-emerald-600" />
                         <span>{worker.skill}</span>
                         <span>•</span>
-                        <span>
-                          {worker.reviewsCount && worker.reviewsCount > 0
-                            ? `⭐ ${Number(worker.rating || 5.0).toFixed(1)} (${worker.reviewsCount})`
-                            : 'No reviews yet'}
-                        </span>
+                        <span>{worker.experienceYears || 3} yrs exp</span>
                       </p>
                       <p className="text-[10px] text-slate-400 truncate mt-0.5">
                         🏛️ {worker.cooperativeName}
@@ -551,26 +541,6 @@ export const ServiceSearchCatalog: React.FC = () => {
             </div>
           </div>
 
-          {/* Minimum Rating */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700">{t('minimumRating') || 'Minimum Rating'}</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[0, 4.0, 4.5, 4.8].map((rate) => (
-                <button
-                  key={rate}
-                  onClick={() => setMinRating(rate)}
-                  className={`py-1.5 text-xs font-bold rounded-lg border text-center transition-colors cursor-pointer ${
-                    minRating === rate
-                      ? 'bg-amber-50 text-amber-900 border-amber-300'
-                      : 'bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  {rate === 0 ? (t('anyRating') || 'Any') : `${rate}★`}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Maximum Price Slider */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
@@ -636,7 +606,7 @@ export const ServiceSearchCatalog: React.FC = () => {
                 className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-semibold text-slate-800 focus:outline-emerald-500 cursor-pointer"
               >
                 <option value="nearest">📍 Nearest Distance First</option>
-                <option value="highest-rated">⭐ Highest Rating</option>
+                <option value="most-experienced">🏆 Most Experienced First</option>
                 <option value="lowest-price">💰 Lowest Hourly Rate</option>
                 <option value="available-now">⚡ Available Now First</option>
               </select>

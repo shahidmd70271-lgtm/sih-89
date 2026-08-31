@@ -40,16 +40,34 @@ export const WorkerJobsView: React.FC<WorkerJobsViewProps> = ({ initialTab = 'pe
     setIsCallModalOpen,
     setIsMessagesModalOpen,
     currentWorker,
+    authLoading,
+    setIsWorkerAuthModalOpen,
     t,
   } = useApp();
 
   const worker = currentWorker;
 
   if (!worker) {
+    if (authLoading) {
+      return (
+        <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-3 animate-pulse">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 mx-auto animate-spin" />
+          <h3 className="text-sm font-bold text-slate-700">Restoring Assignments...</h3>
+          <p className="text-xs text-slate-400">Verifying session credentials from cooperative network...</p>
+        </div>
+      );
+    }
+
     return (
       <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto my-12 space-y-4">
         <h3 className="text-lg font-bold text-slate-900">No Worker Profile Found</h3>
         <p className="text-xs text-slate-500">Please register or log in with your worker credentials.</p>
+        <button
+          onClick={() => setIsWorkerAuthModalOpen(true)}
+          className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all cursor-pointer"
+        >
+          Sign In as Worker
+        </button>
       </div>
     );
   }

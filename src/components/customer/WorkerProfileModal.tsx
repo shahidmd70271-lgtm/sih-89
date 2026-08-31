@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   X,
-  Star,
   MapPin,
   Clock,
   Award,
@@ -18,26 +17,10 @@ export const WorkerProfileModal: React.FC = () => {
     isWorkerProfileModalOpen,
     setIsWorkerProfileModalOpen,
     openBookingForWorker,
-    reviews,
     t,
   } = useApp();
 
   if (!isWorkerProfileModalOpen || !selectedWorker) return null;
-
-  // Combine worker's stored reviews with globally fetched reviews from Supabase
-  const workerReviews = [
-    ...reviews.filter(
-      (r) => r.worker_id === selectedWorker.id || r.workerId === selectedWorker.id
-    ),
-    ...(selectedWorker.reviews || []).filter(
-      (sr) => !reviews.some((gr) => (gr.booking_id && gr.booking_id === sr.id) || gr.id === sr.id)
-    ),
-  ];
-
-  const totalRatingSum = workerReviews.reduce((sum, r) => sum + Number(r.rating || 5), 0);
-  const calculatedAvgRating = workerReviews.length > 0
-    ? (totalRatingSum / workerReviews.length).toFixed(1)
-    : null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150 font-sans">
@@ -90,27 +73,8 @@ export const WorkerProfileModal: React.FC = () => {
         </div>
 
         {/* Core Stats Bar */}
-        <div className="grid grid-cols-4 bg-slate-50 border-b border-slate-200 p-4 text-center">
+        <div className="grid grid-cols-3 bg-slate-50 border-b border-slate-200 p-4 text-center">
           <div>
-            {calculatedAvgRating ? (
-              <>
-                <div className="flex items-center justify-center gap-1 text-sm font-extrabold text-amber-900">
-                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                  <span>{calculatedAvgRating}</span>
-                </div>
-                <div className="text-[10px] text-slate-500 font-medium">
-                  {workerReviews.length} {workerReviews.length === 1 ? 'review' : t('reviews')}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-xs font-bold text-slate-700">No reviews yet</div>
-                <div className="text-[10px] text-slate-400 font-medium">Newly Verified</div>
-              </>
-            )}
-          </div>
-
-          <div className="border-l border-slate-200">
             <div className="text-sm font-extrabold text-slate-900">
               {selectedWorker.completedJobs}
             </div>
@@ -196,65 +160,6 @@ export const WorkerProfileModal: React.FC = () => {
                 {selectedWorker.languages.join(', ')}
               </div>
             </div>
-          </div>
-
-          {/* Customer Reviews Section */}
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                {t('customerReviews')} ({workerReviews.length})
-              </h4>
-              {calculatedAvgRating && (
-                <span className="text-xs font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                  ⭐ {calculatedAvgRating} / 5.0
-                </span>
-              )}
-            </div>
-
-            {workerReviews.length > 0 ? (
-              <div className="space-y-3">
-                {workerReviews.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900">
-                          {rev.customerName || 'Verified Citizen'}
-                        </span>
-                        {rev.customerLocation && (
-                          <span className="text-[10px] text-slate-500">
-                            ({rev.customerLocation})
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="flex text-amber-400">
-                          {Array.from({ length: rev.rating }).map((_, i) => (
-                            <Star key={i} className="w-3 h-3 fill-amber-400" />
-                          ))}
-                        </div>
-                        <span className="text-[10px] text-slate-400">{rev.date}</span>
-                      </div>
-                    </div>
-                    {(rev.feedback || rev.comment) && (
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {rev.feedback || rev.comment}
-                      </p>
-                    )}
-                    <div className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>{t('verifiedCooperativeServiceBooking')}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400 italic">
-                {t('newlyVerifiedNoReviews')}
-              </p>
-            )}
           </div>
         </div>
 

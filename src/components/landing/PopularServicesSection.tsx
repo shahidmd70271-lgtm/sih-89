@@ -62,7 +62,7 @@ export const PopularServicesSection: React.FC = () => {
                 className="group relative bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:shadow-lg hover:border-emerald-400 transition-all duration-200 cursor-pointer flex flex-col justify-between"
               >
                 <div>
-                  {/* Icon & Rating Badge */}
+                  {/* Icon & Verified Badge */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white flex items-center justify-center transition-colors shadow-xs">
                       <ServiceIcon name={cat.id} className="w-6 h-6" />

@@ -410,7 +410,7 @@ export const EmergencyBookingModal: React.FC = () => {
                               <span className="text-[10px] text-emerald-700 font-bold">✓ {t('verified')}</span>
                             </div>
                             <p className="text-xs text-slate-600">
-                              {translatedSkill} • {t('distanceAwayText', { distance: worker.distanceKm })} • ⭐ {worker.rating}
+                              {translatedSkill} • {t('distanceAwayText', { distance: worker.distanceKm })} • {worker.experienceYears || 3} yrs exp
                             </p>
                             <p className="text-[10px] text-slate-400 truncate">
                               {worker.cooperativeName}

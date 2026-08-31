@@ -401,7 +401,7 @@ export const OpenStreetMapView: React.FC<OpenStreetMapViewProps> = ({
             <div style="font-family: sans-serif; padding: 4px;">
               <strong style="color: #0f172a; font-size: 12px; display: block;">${w.name}</strong>
               <span style="font-size: 11px; color: #059669; font-weight: bold;">${w.skill} • ₹${w.basePricePerHour}/hr</span>
-              <div style="font-size: 10px; color: #64748b; margin-top: 2px;">⭐ ${w.rating} (Cooperative Verified)</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${w.experienceYears || 3} yrs exp • Cooperative Verified</div>
             </div>
           `);
 
