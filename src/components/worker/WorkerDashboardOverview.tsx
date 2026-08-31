@@ -53,7 +53,8 @@ export const WorkerDashboardOverview: React.FC = () => {
     return (
       b.workerId === worker.id ||
       (b as any).worker_id === worker.id ||
-      (worker.profile_id && (b.workerId === worker.profile_id || (b as any).worker_id === worker.profile_id))
+      (worker.profile_id && (b.workerId === worker.profile_id || (b as any).worker_id === worker.profile_id)) ||
+      (b.workerName && worker.name && b.workerName.toLowerCase().trim() === worker.name.toLowerCase().trim())
     );
   };
 
@@ -77,13 +78,13 @@ export const WorkerDashboardOverview: React.FC = () => {
   // Get pending bookings for this worker (and trade matching emergencies)
   const pendingRequests = bookings.filter(
     (b) =>
-      (b.workerId === worker.id || (b.isEmergency && b.serviceType === worker.skill)) &&
+      (isWorkerBooking(b) || (b.isEmergency && b.serviceType === worker.skill)) &&
       (b.status === 'requested' || b.status === 'Pending' || b.status === 'Waiting for Response')
   );
 
   const acceptedJobs = bookings.filter(
     (b) =>
-      b.workerId === worker.id &&
+      isWorkerBooking(b) &&
       (b.status === 'accepted' ||
         b.status === 'Worker Accepted' ||
         b.status === 'Worker Travelling' ||

@@ -15,12 +15,34 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const WorkerSidebar: React.FC = () => {
-  const { activeView, setActiveView, currentWorker, workers, activeBooking, t } = useApp();
+  const { activeView, setActiveView, currentWorker, workers, activeBooking, bookings, t } = useApp();
   const worker = currentWorker || workers[0];
+
+  const isWorkerBooking = (b: any) => {
+    if (!worker) return false;
+    return (
+      b.workerId === worker.id ||
+      b.worker_id === worker.id ||
+      (worker.profile_id && (b.workerId === worker.profile_id || b.worker_id === worker.profile_id)) ||
+      (b.workerName && worker.name && b.workerName.toLowerCase().trim() === worker.name.toLowerCase().trim())
+    );
+  };
+
+  const pendingRequestsCount = bookings.filter(
+    (b) =>
+      worker &&
+      (isWorkerBooking(b) || (b.isEmergency && b.serviceType === worker.skill)) &&
+      (b.status === 'requested' || b.status === 'Pending' || b.status === 'Waiting for Response')
+  ).length;
 
   const navItems = [
     { id: 'worker-dashboard', label: t('navDashboard'), icon: LayoutDashboard },
-    { id: 'worker-jobs', label: t('workerJobsAvailable'), icon: Briefcase, badge: t('workerJobsNewBadge') },
+    {
+      id: 'worker-jobs',
+      label: t('workerJobsAvailable'),
+      icon: Briefcase,
+      badge: pendingRequestsCount > 0 ? `${pendingRequestsCount} New` : undefined,
+    },
     { id: 'worker-my-jobs', label: t('workerMyJobs'), icon: CheckCircle2 },
     { id: 'worker-schedule', label: 'Availability & Slots', icon: Clock },
     { id: 'worker-live-job', label: t('workerActiveJobTracker'), icon: Navigation, pulse: true, badge: t('live') },

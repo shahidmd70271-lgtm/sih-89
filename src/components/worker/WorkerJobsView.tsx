@@ -62,8 +62,17 @@ export const WorkerJobsView: React.FC<WorkerJobsViewProps> = ({ initialTab = 'pe
 
   // Filter bookings for this worker
   // Note: For emergency requests, online workers of the same trade can also see broadcast requests!
+  const isWorkerBooking = (b: Booking) => {
+    return (
+      b.workerId === worker.id ||
+      (b as any).worker_id === worker.id ||
+      (worker.profile_id && (b.workerId === worker.profile_id || (b as any).worker_id === worker.profile_id)) ||
+      (b.workerName && worker.name && b.workerName.toLowerCase().trim() === worker.name.toLowerCase().trim())
+    );
+  };
+
   const allWorkerBookings = bookings.filter(
-    (b) => b.workerId === worker.id || (b.isEmergency && b.serviceType === worker.skill)
+    (b) => isWorkerBooking(b) || (b.isEmergency && b.serviceType === worker.skill)
   );
 
   const pendingBookings = allWorkerBookings.filter(

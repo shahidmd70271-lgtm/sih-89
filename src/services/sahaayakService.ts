@@ -855,7 +855,15 @@ export class SahaayakService implements ISahaayakService {
   }
 
   async acceptBooking(bookingId: string, workerId: string): Promise<Booking> {
-    const booking = this.bookings.find((b) => b.id === bookingId);
+    let booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking && isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+        if (data) booking = mapDbRowToBooking(data);
+      } catch (e) {
+        // non-blocking
+      }
+    }
     if (!booking) throw new Error('Booking not found');
 
     booking.status = 'accepted';
@@ -876,11 +884,20 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
+    this.bookings = [booking, ...this.bookings.filter((b) => b.id !== bookingId)];
     return { ...booking };
   }
 
   async rejectBooking(bookingId: string, workerId: string, reason?: string): Promise<Booking> {
-    const booking = this.bookings.find((b) => b.id === bookingId);
+    let booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking && isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+        if (data) booking = mapDbRowToBooking(data);
+      } catch (e) {
+        // non-blocking
+      }
+    }
     if (!booking) throw new Error('Booking not found');
 
     booking.status = 'rejected';
@@ -903,6 +920,7 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
+    this.bookings = [booking, ...this.bookings.filter((b) => b.id !== bookingId)];
     return { ...booking };
   }
 

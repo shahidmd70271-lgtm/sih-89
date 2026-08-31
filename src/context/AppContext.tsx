@@ -426,7 +426,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
           .subscribe();
 
+        const pollInterval = setInterval(async () => {
+          try {
+            const freshBookings = await sahaayakService.getBookings();
+            setBookings(freshBookings);
+          } catch (e) {
+            // silent catch on background poll
+          }
+        }, 4000);
+
         return () => {
+          clearInterval(pollInterval);
           supabase.removeChannel(bookingsChannel);
           supabase.removeChannel(workersChannel);
           supabase.removeChannel(reviewsChannel);
@@ -475,10 +485,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (w) =>
             w.profile_id === currentUser?.id ||
             (w.email && currentUser?.email && w.email.toLowerCase() === currentUser.email.toLowerCase()) ||
-            (w.phone && currentUser?.phone && w.phone === currentUser.phone)
+            (w.phone && currentUser?.phone && w.phone === currentUser.phone) ||
+            (w.name && currentUser?.name && w.name.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
         )
       : null) ||
     null;
+
+  // Synchronize worker notifications dynamically from requested bookings
+  useEffect(() => {
+    const targetWorker = currentWorker || (workers.length > 0 ? workers[0] : null);
+    if (!targetWorker) return;
+
+    const isWorkerBooking = (b: Booking) => {
+      return (
+        b.workerId === targetWorker.id ||
+        (b as any).worker_id === targetWorker.id ||
+        (targetWorker.profile_id &&
+          (b.workerId === targetWorker.profile_id || (b as any).worker_id === targetWorker.profile_id)) ||
+        (b.workerName && targetWorker.name && b.workerName.toLowerCase().trim() === targetWorker.name.toLowerCase().trim())
+      );
+    };
+
+    const workerRequestedBookings = bookings.filter(
+      (b) =>
+        (isWorkerBooking(b) || (b.isEmergency && b.serviceType === targetWorker.skill)) &&
+        (b.status === 'requested' || b.status === 'Pending' || b.status === 'Waiting for Response')
+    );
+
+    setWorkerNotifications((prev) => {
+      const updated = [...prev];
+      for (const b of workerRequestedBookings) {
+        const notifId = `notif-${b.id}`;
+        if (!updated.some((n) => n.id === notifId || n.bookingId === b.id)) {
+          updated.unshift({
+            id: notifId,
+            workerId: targetWorker.id,
+            bookingId: b.id,
+            type: b.isEmergency ? 'emergency_request' : 'service_request',
+            title: b.isEmergency ? 'New Emergency Request' : 'New Service Request',
+            message: `${b.customerName || 'Customer'} requested ${b.serviceType} Service (${b.timeSlot || 'Scheduled'}).`,
+            timestamp: b.createdAt || 'Just now',
+            isRead: false,
+            isEmergency: b.isEmergency,
+          });
+        }
+      }
+      return updated;
+    });
+  }, [bookings, currentWorker, workers]);
 
   const activeBooking = (() => {
     // If activeBookingId is set, verify that it is actually active
@@ -604,7 +658,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const markNotificationAsRead = (id: string) => {
     setWorkerNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      prev.map((n) => (n.id === id || n.bookingId === id ? { ...n, isRead: true } : n))
     );
   };
 
@@ -613,7 +667,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearNotification = (id: string) => {
-    setWorkerNotifications((prev) => prev.filter((n) => n.id !== id));
+    setWorkerNotifications((prev) => prev.filter((n) => n.id !== id && n.bookingId !== id));
   };
 
   const clearAllNotifications = () => {

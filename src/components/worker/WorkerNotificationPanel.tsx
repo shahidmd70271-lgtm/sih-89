@@ -82,7 +82,8 @@ export const WorkerNotificationPanel: React.FC<WorkerNotificationPanelProps> = (
   const handleNotificationClick = (notif: WorkerNotification) => {
     markNotificationAsRead(notif.id);
     if (notif.bookingId) {
-      setActiveView('worker-dashboard');
+      setActiveView('worker-jobs');
+      onClose();
     }
   };
 
