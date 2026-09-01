@@ -15,15 +15,21 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const WorkerSidebar: React.FC = () => {
-  const { activeView, setActiveView, currentWorker, workers, activeBooking, bookings, t } = useApp();
+  const { activeView, setActiveView, currentWorker, workers, activeBooking, bookings, currentUser, t } = useApp();
   const worker = currentWorker || workers[0];
 
   const isWorkerBooking = (b: any) => {
     if (!worker) return false;
-    return (
-      b.workerId === worker.id ||
-      b.worker_id === worker.id ||
-      (worker.profile_id && (b.workerId === worker.profile_id || b.worker_id === worker.profile_id)) ||
+    const workerBizId = worker.id;
+    const workerProfileId = worker.profile_id;
+    const authId = currentUser?.id;
+    const authWorkerId = currentUser?.workerId;
+
+    return Boolean(
+      (workerBizId && (b.workerId === workerBizId || b.worker_id === workerBizId)) ||
+      (authWorkerId && (b.workerId === authWorkerId || b.worker_id === authWorkerId)) ||
+      (workerProfileId && (b.workerId === workerProfileId || b.worker_id === workerProfileId)) ||
+      (authId && (b.workerId === authId || b.worker_id === authId)) ||
       (b.workerName && worker.name && b.workerName.toLowerCase().trim() === worker.name.toLowerCase().trim())
     );
   };

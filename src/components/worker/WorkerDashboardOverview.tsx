@@ -36,6 +36,7 @@ export const WorkerDashboardOverview: React.FC = () => {
     currentWorker,
     authLoading,
     setIsWorkerAuthModalOpen,
+    currentUser,
     t,
   } = useApp();
 
@@ -68,10 +69,17 @@ export const WorkerDashboardOverview: React.FC = () => {
 
   // Real paid bookings for this worker
   const isWorkerBooking = (b: Booking) => {
-    return (
-      b.workerId === worker.id ||
-      (b as any).worker_id === worker.id ||
-      (worker.profile_id && (b.workerId === worker.profile_id || (b as any).worker_id === worker.profile_id)) ||
+    if (!worker) return false;
+    const workerBizId = worker.id;
+    const workerProfileId = worker.profile_id;
+    const authId = currentUser?.id;
+    const authWorkerId = currentUser?.workerId;
+
+    return Boolean(
+      (workerBizId && (b.workerId === workerBizId || (b as any).worker_id === workerBizId)) ||
+      (authWorkerId && (b.workerId === authWorkerId || (b as any).worker_id === authWorkerId)) ||
+      (workerProfileId && (b.workerId === workerProfileId || (b as any).worker_id === workerProfileId)) ||
+      (authId && (b.workerId === authId || (b as any).worker_id === authId)) ||
       (b.workerName && worker.name && b.workerName.toLowerCase().trim() === worker.name.toLowerCase().trim())
     );
   };

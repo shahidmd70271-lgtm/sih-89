@@ -18,7 +18,7 @@ import {
 import { COOPERATIVE_SOCIETIES } from '../data/mockData';
 import { translate } from '../translations';
 import { authService } from '../services/authService';
-import { sahaayakService, mapDbRowToWorker } from '../services/sahaayakService';
+import { sahaayakService, mapDbRowToWorker, mapDbRowToBooking } from '../services/sahaayakService';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { computeWorkerSlotsForDate, toggleSlotForDate } from '../utils/availabilityUtils';
 import { isBookingActiveForExecution } from '../utils/statusUtils';
@@ -193,6 +193,12 @@ const parseRouteFromUrl = (): { view?: string; role?: UserRole } | null => {
   if (rawRoute === 'worker-jobs' || rawRoute === 'worker/jobs') {
     return { view: 'worker-jobs', role: 'worker' };
   }
+  if (rawRoute === 'worker-my-jobs' || rawRoute === 'worker/my-jobs') {
+    return { view: 'worker-my-jobs', role: 'worker' };
+  }
+  if (rawRoute === 'worker-live-job' || rawRoute === 'worker/live-job') {
+    return { view: 'worker-live-job', role: 'worker' };
+  }
   if (rawRoute === 'worker-schedule' || rawRoute === 'worker/schedule') {
     return { view: 'worker-schedule', role: 'worker' };
   }
@@ -204,6 +210,9 @@ const parseRouteFromUrl = (): { view?: string; role?: UserRole } | null => {
   }
   if (rawRoute === 'worker-profile' || rawRoute === 'worker/profile') {
     return { view: 'worker-profile', role: 'worker' };
+  }
+  if (rawRoute === 'worker-certifications' || rawRoute === 'worker/certifications') {
+    return { view: 'worker-certifications', role: 'worker' };
   }
 
   // Customer routes
@@ -574,8 +583,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [activeView, currentRole, currentUser, isBookingModalOpen]);
 
-  // 3. Worker Realtime & Polling Heartbeat (Active ONLY in Worker Portal or when Worker is signed in)
+  // 3. Worker Realtime & Polling Heartbeat (Active in Worker Portal or when Worker is signed in)
   useEffect(() => {
+    let isMounted = true;
     const isWorkerActive =
       currentRole === 'worker' ||
       activeView.startsWith('worker-') ||
@@ -589,9 +599,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log('[Worker Realtime] Subscribing for worker ID:', workerId);
 
     let bookingsChannel: any = null;
+    let globalChannel: any = null;
     let pollInterval: any = null;
 
+    const reloadFreshBookings = async () => {
+      try {
+        const freshBookings = await sahaayakService.getBookings();
+        if (isMounted) {
+          setBookings(freshBookings);
+        }
+      } catch (e) {
+        // silent background notice
+      }
+    };
+
     try {
+      // Direct PostgreSQL WAL changes channel
       bookingsChannel = supabase
         .channel(`worker-realtime-bookings-${workerId}`)
         .on(
@@ -602,14 +625,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             table: 'bookings',
           },
           async (payload) => {
-            console.log('[Worker Realtime] New booking change received:', payload.eventType, (payload.new as any)?.id);
-            try {
-              const freshBookings = await sahaayakService.getBookings();
-              setBookings(freshBookings);
-              console.log('[Worker Realtime] Bookings updated from realtime. Count:', freshBookings.length);
-            } catch (e) {
-              console.warn('[Worker Realtime] Bookings reload notice:', e);
+            console.log('[Worker Realtime] Postgres booking change received:', payload.eventType, (payload.new as any)?.id);
+            if (payload.new && (payload.new as any).id) {
+              const incoming = mapDbRowToBooking(payload.new);
+              if (isMounted) {
+                setBookings((prev) => [incoming, ...prev.filter((b) => b.id !== incoming.id)]);
+              }
             }
+            await reloadFreshBookings();
           }
         )
         .subscribe((status, err) => {
@@ -621,26 +644,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
 
-      pollInterval = setInterval(async () => {
-        try {
-          const freshBookings = await sahaayakService.getBookings();
-          setBookings(freshBookings);
-        } catch (e) {
-          // silent catch on background poll
-        }
-      }, 6000);
+      // Global Realtime Broadcast channel for instant cross-tab delivery (< 100ms)
+      globalChannel = supabase
+        .channel('sahaayak-bookings-realtime')
+        .on('broadcast', { event: 'booking_created' }, async (event) => {
+          console.log('[Worker Realtime] Broadcast booking_created event:', event);
+          if (event.payload && event.payload.id) {
+            const incoming = event.payload.id.startsWith('SHK-') || event.payload.id.startsWith('POL-')
+              ? event.payload
+              : mapDbRowToBooking(event.payload);
+            if (isMounted) {
+              setBookings((prev) => [incoming, ...prev.filter((b) => b.id !== incoming.id)]);
+            }
+          }
+          await reloadFreshBookings();
+        })
+        .on('broadcast', { event: 'booking_updated' }, async (event) => {
+          console.log('[Worker Realtime] Broadcast booking_updated event:', event);
+          await reloadFreshBookings();
+        })
+        .subscribe();
+
+      // Fast 1.5s background polling heartbeat ensures zero-latency booking delivery without manual refresh
+      pollInterval = setInterval(reloadFreshBookings, 1500);
     } catch (err) {
       console.warn('[Worker Realtime] Subscription exception:', err);
     }
 
     return () => {
+      isMounted = false;
       console.log('[Worker Realtime] Cleaning up worker realtime channel');
       if (pollInterval) clearInterval(pollInterval);
       if (bookingsChannel && supabase) {
         supabase.removeChannel(bookingsChannel);
       }
+      if (globalChannel && supabase) {
+        supabase.removeChannel(globalChannel);
+      }
     };
-  }, [currentRole, activeView.startsWith('worker-'), currentUser?.id]);
+  }, [currentRole, activeView, currentUser?.id, currentUser?.workerId]);
 
   // Fallback worker profile from authenticated session while database query resolves
   const fallbackWorkerFromUser: Worker | null = useMemo(() => {
@@ -702,11 +744,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!targetWorker) return;
 
     const isWorkerBooking = (b: Booking) => {
-      return (
-        b.workerId === targetWorker.id ||
-        (b as any).worker_id === targetWorker.id ||
-        (targetWorker.profile_id &&
-          (b.workerId === targetWorker.profile_id || (b as any).worker_id === targetWorker.profile_id)) ||
+      if (!targetWorker) return false;
+      const workerBizId = targetWorker.id;
+      const workerProfileId = targetWorker.profile_id;
+      const authId = currentUser?.id;
+      const authWorkerId = currentUser?.workerId;
+
+      return Boolean(
+        (workerBizId && (b.workerId === workerBizId || (b as any).worker_id === workerBizId)) ||
+        (authWorkerId && (b.workerId === authWorkerId || (b as any).worker_id === authWorkerId)) ||
+        (workerProfileId && (b.workerId === workerProfileId || (b as any).worker_id === workerProfileId)) ||
+        (authId && (b.workerId === authId || (b as any).worker_id === authId)) ||
         (b.workerName && targetWorker.name && b.workerName.toLowerCase().trim() === targetWorker.name.toLowerCase().trim())
       );
     };
@@ -997,6 +1045,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBookings((prev) => [createdBooking, ...prev.filter((b) => b.id !== createdBooking.id)]);
     setActiveBookingId(createdBooking.id);
 
+    // Broadcast across realtime channels to all open tabs and worker sessions
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const globalChan = supabase.channel('sahaayak-bookings-realtime');
+        globalChan.send({
+          type: 'broadcast',
+          event: 'booking_created',
+          payload: createdBooking,
+        });
+      } catch (e) {
+        // non-blocking
+      }
+    }
+
     addWorkerNotification({
       workerId: worker.id,
       type: createdBooking.isEmergency ? 'emergency_request' : 'service_request',
@@ -1024,6 +1086,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, ...updated, status } : b))
     );
+
+    // Broadcast status change across realtime channels
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const globalChan = supabase.channel('sahaayak-bookings-realtime');
+        globalChan.send({
+          type: 'broadcast',
+          event: 'booking_updated',
+          payload: { bookingId, status },
+        });
+      } catch (e) {
+        // non-blocking
+      }
+    }
 
     const targetBooking = bookings.find((b) => b.id === bookingId) || activeBooking;
     if (status === 'travelling') {
