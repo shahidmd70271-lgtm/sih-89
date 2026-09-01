@@ -250,6 +250,18 @@ export const mapDbRowToBooking = (row: any): Booking => {
   };
 };
 
+/**
+ * Generates a reliably unique, human-readable booking ID
+ * Format: SHK-YYYY-XXXXXXXX (e.g. SHK-2026-76118492)
+ * Combines current year + microsecond timestamp slice + 4 pseudo-random digits for maximum collision avoidance
+ */
+export const generateUniqueBookingId = (): string => {
+  const year = new Date().getFullYear();
+  const timeSlice = Date.now().toString().slice(-4);
+  const randDigits = Math.floor(1000 + Math.random() * 9000).toString();
+  return `SHK-${year}-${timeSlice}${randDigits}`;
+};
+
 export class SahaayakService implements ISahaayakService {
   private workers: Worker[] = [];
   private bookings: Booking[] = [];
@@ -773,9 +785,6 @@ export class SahaayakService implements ISahaayakService {
   }
 
   async createBooking(bookingData: Partial<Booking>): Promise<Booking> {
-    const randomId = `SHK-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const randomOtp = `${Math.floor(1000 + Math.random() * 9000)}`;
-
     const estimatedPrice = bookingData.estimatedPrice || 299;
     const platformFee = 15;
     const welfareCess = Math.round(estimatedPrice * 0.05);
@@ -797,102 +806,140 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
-    const newBooking: Booking = {
-      id: randomId,
-      customer_id: validCustomerId,
-      customerName: bookingData.customerName || 'Customer',
-      customerPhone: bookingData.customerPhone || '',
-      customerAddress: bookingData.customerAddress || 'Customer Address',
-      latitude: bookingData.latitude,
-      longitude: bookingData.longitude,
-      customerCoordinates:
-        typeof bookingData.latitude === 'number' && typeof bookingData.longitude === 'number'
-          ? { lat: bookingData.latitude, lng: bookingData.longitude }
-          : undefined,
-      worker_id: bookingData.workerId,
-      workerId: bookingData.workerId || '',
-      workerName: bookingData.workerName || 'Worker',
-      workerSkill: bookingData.workerSkill || 'Plumbing',
-      workerAvatar: bookingData.workerAvatar || '',
-      workerPhone: bookingData.workerPhone || '',
-      serviceType: bookingData.serviceType || 'Plumbing',
-      date: bookingData.date || 'Today',
-      booking_date: bookingData.date || 'Today',
-      timeSlot: bookingData.timeSlot || '10:00 AM – 11:00 AM',
-      slotId: bookingData.slotId,
-      problemDescription: bookingData.problemDescription || 'Service requested.',
-      estimatedPrice,
-      platformFee,
-      welfareCess,
-      totalAmount,
-      amount: totalAmount,
-      status: 'requested', // Real booking starts in requested status
-      isEmergency: !!bookingData.isEmergency,
-      etaMinutes: bookingData.isEmergency ? 15 : 0,
-      createdAt: 'Just now',
-      created_at: new Date().toISOString(),
-      otpCode: randomOtp,
-      otp_code: randomOtp,
-      otp: randomOtp,
-      otp_verified: false,
-      paymentStatus: 'pending',
-    };
-
     if (!isSupabaseConfigured || !supabase) {
       throw new Error('Supabase is not configured. Bookings cannot be created without a backend.');
     }
 
-    try {
-      const { data: insertedRows, error: insertErr } = await supabase.from('bookings').insert([
-        {
-          id: newBooking.id,
-          customer_id: validCustomerId || null,
-          customer_name: newBooking.customerName || 'Customer',
-          customer_phone: newBooking.customerPhone || '9876543210',
-          customer_address: newBooking.customerAddress || 'Customer Address',
-          latitude: newBooking.latitude || (newBooking.customerCoordinates?.lat) || 28.5700,
-          longitude: newBooking.longitude || (newBooking.customerCoordinates?.lng) || 77.2200,
-          worker_id: newBooking.workerId || '',
-          worker_name: newBooking.workerName || 'Worker',
-          worker_skill: newBooking.workerSkill || newBooking.serviceType || 'Plumbing',
-          worker_avatar: newBooking.workerAvatar || '',
-          worker_phone: newBooking.workerPhone || '9876543210',
-          service_type: newBooking.serviceType || newBooking.workerSkill || 'Plumbing',
-          scheduled_date: newBooking.date || 'Today',
-          time_slot: newBooking.timeSlot || '10:00 AM – 11:00 AM',
-          slot_id: newBooking.slotId || null,
-          problem_description: newBooking.problemDescription || 'Service requested.',
-          estimated_price: newBooking.estimatedPrice || 299,
-          platform_fee: newBooking.platformFee || 15,
-          welfare_cess: newBooking.welfareCess || 15,
-          total_amount: newBooking.totalAmount || 329,
-          status: newBooking.status || 'requested',
-          is_emergency: !!newBooking.isEmergency,
-          eta_minutes: newBooking.etaMinutes || 0,
-          otp: newBooking.otp || '5842',
-          otp_verified: false,
-          payment_status: 'pending',
-          created_at: newBooking.created_at,
-        },
-      ]).select();
+    const MAX_RETRIES = 5;
+    let lastError: any = null;
 
-      if (insertErr) {
-        console.error('[createBooking] Supabase insert error:', insertErr);
-        throw new Error(`Failed to create booking in database: ${insertErr.message}`);
-      }
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const generatedId = bookingData.id || generateUniqueBookingId();
+      const randomOtp = bookingData.otpCode || `${Math.floor(1000 + Math.random() * 9000)}`;
 
-      if (insertedRows && insertedRows.length > 0) {
-        const canonicalBooking = mapDbRowToBooking(insertedRows[0]);
-        this.bookings = [canonicalBooking, ...this.bookings.filter((b) => b.id !== canonicalBooking.id)];
-        return canonicalBooking;
+      const newBooking: Booking = {
+        id: generatedId,
+        customer_id: validCustomerId,
+        customerName: bookingData.customerName || 'Customer',
+        customerPhone: bookingData.customerPhone || '',
+        customerAddress: bookingData.customerAddress || 'Customer Address',
+        latitude: bookingData.latitude,
+        longitude: bookingData.longitude,
+        customerCoordinates:
+          typeof bookingData.latitude === 'number' && typeof bookingData.longitude === 'number'
+            ? { lat: bookingData.latitude, lng: bookingData.longitude }
+            : undefined,
+        worker_id: bookingData.workerId,
+        workerId: bookingData.workerId || '',
+        workerName: bookingData.workerName || 'Worker',
+        workerSkill: bookingData.workerSkill || 'Plumbing',
+        workerAvatar: bookingData.workerAvatar || '',
+        workerPhone: bookingData.workerPhone || '',
+        serviceType: bookingData.serviceType || 'Plumbing',
+        date: bookingData.date || 'Today',
+        booking_date: bookingData.date || 'Today',
+        timeSlot: bookingData.timeSlot || '10:00 AM – 11:00 AM',
+        slotId: bookingData.slotId,
+        problemDescription: bookingData.problemDescription || 'Service requested.',
+        estimatedPrice,
+        platformFee,
+        welfareCess,
+        totalAmount,
+        amount: totalAmount,
+        status: 'requested', // Real booking starts in requested status
+        isEmergency: !!bookingData.isEmergency,
+        etaMinutes: bookingData.isEmergency ? 15 : 0,
+        createdAt: 'Just now',
+        created_at: new Date().toISOString(),
+        otpCode: randomOtp,
+        otp_code: randomOtp,
+        otp: randomOtp,
+        otp_verified: false,
+        paymentStatus: 'pending',
+      };
+
+      try {
+        const { data: insertedRows, error: insertErr } = await supabase.from('bookings').insert([
+          {
+            id: newBooking.id,
+            customer_id: validCustomerId || null,
+            customer_name: newBooking.customerName || 'Customer',
+            customer_phone: newBooking.customerPhone || '9876543210',
+            customer_address: newBooking.customerAddress || 'Customer Address',
+            latitude: newBooking.latitude || (newBooking.customerCoordinates?.lat) || 28.5700,
+            longitude: newBooking.longitude || (newBooking.customerCoordinates?.lng) || 77.2200,
+            worker_id: newBooking.workerId || '',
+            worker_name: newBooking.workerName || 'Worker',
+            worker_skill: newBooking.workerSkill || newBooking.serviceType || 'Plumbing',
+            worker_avatar: newBooking.workerAvatar || '',
+            worker_phone: newBooking.workerPhone || '9876543210',
+            service_type: newBooking.serviceType || newBooking.workerSkill || 'Plumbing',
+            scheduled_date: newBooking.date || 'Today',
+            time_slot: newBooking.timeSlot || '10:00 AM – 11:00 AM',
+            slot_id: newBooking.slotId || null,
+            problem_description: newBooking.problemDescription || 'Service requested.',
+            estimated_price: newBooking.estimatedPrice || 299,
+            platform_fee: newBooking.platformFee || 15,
+            welfare_cess: newBooking.welfareCess || 15,
+            total_amount: newBooking.totalAmount || 329,
+            status: newBooking.status || 'requested',
+            is_emergency: !!newBooking.isEmergency,
+            eta_minutes: newBooking.etaMinutes || 0,
+            otp: newBooking.otp || '5842',
+            otp_verified: false,
+            payment_status: 'pending',
+            created_at: newBooking.created_at,
+          },
+        ]).select();
+
+        if (insertErr) {
+          // Check for unique constraint violation (PostgreSQL error code 23505)
+          const isUniqueViolation =
+            insertErr.code === '23505' ||
+            insertErr.message?.includes('duplicate key') ||
+            insertErr.message?.includes('unique constraint') ||
+            insertErr.message?.includes('bookings_pkey');
+
+          if (isUniqueViolation) {
+            console.warn(`[createBooking] ID collision on ${generatedId}, retrying attempt ${attempt + 1}/${MAX_RETRIES}...`);
+            lastError = insertErr;
+            bookingData.id = undefined;
+            continue;
+          }
+
+          console.error('[createBooking] Supabase insert error:', insertErr);
+          throw new Error(`Failed to create booking in database: ${insertErr.message}`);
+        }
+
+        if (insertedRows && insertedRows.length > 0) {
+          const canonicalBooking = mapDbRowToBooking(insertedRows[0]);
+          this.bookings = [canonicalBooking, ...this.bookings.filter((b) => b.id !== canonicalBooking.id)];
+          return canonicalBooking;
+        }
+
+        this.bookings = [newBooking, ...this.bookings.filter((b) => b.id !== newBooking.id)];
+        return newBooking;
+      } catch (err: any) {
+        const isUniqueViolation =
+          err.code === '23505' ||
+          err.message?.includes('duplicate key') ||
+          err.message?.includes('unique constraint') ||
+          err.message?.includes('bookings_pkey');
+
+        if (isUniqueViolation) {
+          console.warn(`[createBooking] ID collision caught on ${generatedId}, retrying attempt ${attempt + 1}/${MAX_RETRIES}...`);
+          lastError = err;
+          bookingData.id = undefined;
+          continue;
+        }
+        console.warn('Supabase booking insert exception:', err);
+        throw err;
       }
-    } catch (err) {
-      console.warn('Supabase booking insert warning:', err);
-      throw err;
     }
 
-    this.bookings = [newBooking, ...this.bookings];
-    return newBooking;
+    throw new Error(
+      `Failed to create booking after ${MAX_RETRIES} attempts due to unique ID collision: ${lastError?.message || 'Unique constraint violation'}`
+    );
   }
 
   async acceptBooking(bookingId: string, workerId: string): Promise<Booking> {
