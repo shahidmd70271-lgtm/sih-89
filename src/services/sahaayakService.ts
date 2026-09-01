@@ -781,10 +781,21 @@ export class SahaayakService implements ISahaayakService {
     const welfareCess = Math.round(estimatedPrice * 0.05);
     const totalAmount = estimatedPrice + platformFee + welfareCess;
 
-    const validCustomerId =
-      bookingData.customer_id && /^[0-9a-f-]{36}$/i.test(bookingData.customer_id)
+    let validCustomerId =
+      bookingData.customer_id && isValidUuid(bookingData.customer_id)
         ? bookingData.customer_id
         : undefined;
+
+    if (!validCustomerId && isSupabaseConfigured && supabase) {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user?.id && isValidUuid(authData.user.id)) {
+          validCustomerId = authData.user.id;
+        }
+      } catch {
+        // fallback
+      }
+    }
 
     const newBooking: Booking = {
       id: randomId,
@@ -832,38 +843,49 @@ export class SahaayakService implements ISahaayakService {
     }
 
     try {
-      await supabase.from('bookings').insert([
+      const { data: insertedRows, error: insertErr } = await supabase.from('bookings').insert([
         {
           id: newBooking.id,
           customer_id: validCustomerId || null,
-          customer_name: newBooking.customerName,
-          customer_phone: newBooking.customerPhone,
-          customer_address: newBooking.customerAddress,
+          customer_name: newBooking.customerName || 'Customer',
+          customer_phone: newBooking.customerPhone || '9876543210',
+          customer_address: newBooking.customerAddress || 'Customer Address',
           latitude: newBooking.latitude || (newBooking.customerCoordinates?.lat) || 28.5700,
           longitude: newBooking.longitude || (newBooking.customerCoordinates?.lng) || 77.2200,
-          worker_id: newBooking.workerId,
-          worker_name: newBooking.workerName,
-          worker_skill: newBooking.workerSkill,
-          worker_avatar: newBooking.workerAvatar,
-          worker_phone: newBooking.workerPhone,
-          service_type: newBooking.serviceType,
-          scheduled_date: newBooking.date,
-          time_slot: newBooking.timeSlot,
-          slot_id: newBooking.slotId,
-          problem_description: newBooking.problemDescription,
-          estimated_price: newBooking.estimatedPrice,
-          platform_fee: newBooking.platformFee,
-          welfare_cess: newBooking.welfareCess,
-          total_amount: newBooking.totalAmount,
-          status: newBooking.status,
-          is_emergency: newBooking.isEmergency,
-          eta_minutes: newBooking.etaMinutes,
-          otp: newBooking.otp,
+          worker_id: newBooking.workerId || '',
+          worker_name: newBooking.workerName || 'Worker',
+          worker_skill: newBooking.workerSkill || newBooking.serviceType || 'Plumbing',
+          worker_avatar: newBooking.workerAvatar || '',
+          worker_phone: newBooking.workerPhone || '9876543210',
+          service_type: newBooking.serviceType || newBooking.workerSkill || 'Plumbing',
+          scheduled_date: newBooking.date || 'Today',
+          time_slot: newBooking.timeSlot || '10:00 AM – 11:00 AM',
+          slot_id: newBooking.slotId || null,
+          problem_description: newBooking.problemDescription || 'Service requested.',
+          estimated_price: newBooking.estimatedPrice || 299,
+          platform_fee: newBooking.platformFee || 15,
+          welfare_cess: newBooking.welfareCess || 15,
+          total_amount: newBooking.totalAmount || 329,
+          status: newBooking.status || 'requested',
+          is_emergency: !!newBooking.isEmergency,
+          eta_minutes: newBooking.etaMinutes || 0,
+          otp: newBooking.otp || '5842',
           otp_verified: false,
           payment_status: 'pending',
           created_at: newBooking.created_at,
         },
-      ]);
+      ]).select();
+
+      if (insertErr) {
+        console.error('[createBooking] Supabase insert error:', insertErr);
+        throw new Error(`Failed to create booking in database: ${insertErr.message}`);
+      }
+
+      if (insertedRows && insertedRows.length > 0) {
+        const canonicalBooking = mapDbRowToBooking(insertedRows[0]);
+        this.bookings = [canonicalBooking, ...this.bookings.filter((b) => b.id !== canonicalBooking.id)];
+        return canonicalBooking;
+      }
     } catch (err) {
       console.warn('Supabase booking insert warning:', err);
       throw err;

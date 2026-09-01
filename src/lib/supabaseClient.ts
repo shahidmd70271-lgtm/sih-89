@@ -95,12 +95,52 @@ if (!configStatus.isConfigured) {
 
 export const isSupabaseConfigured = configStatus.isConfigured;
 
+// Custom per-tab storage adapter: uses sessionStorage in browser (isolated per tab, survives page reload/F5)
+// Falls back to in-memory storage in SSR/Node.js testing environments
+const inMemoryTabStorage = new Map<string, string>();
+
+export const tabSessionStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        return window.sessionStorage.getItem(key);
+      }
+    } catch {
+      // fallback
+    }
+    return inMemoryTabStorage.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // fallback
+    }
+    inMemoryTabStorage.set(key, value);
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+    } catch {
+      // fallback
+    }
+    inMemoryTabStorage.delete(key);
+  },
+};
+
 let supabaseInstance: SupabaseClient | null = null;
 
 if (isSupabaseConfigured) {
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
+        storage: tabSessionStorage,
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
@@ -113,3 +153,4 @@ if (isSupabaseConfigured) {
 }
 
 export const supabase = supabaseInstance;
+

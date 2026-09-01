@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   UserRole,
   LanguageCode,
@@ -451,7 +451,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   setCurrentUser(user);
                   setCurrentRoleState(role);
                   if (role === 'admin') {
-                    setActiveViewState('admin-verification');
+                    setActiveViewState((currView) => (currView === 'landing' || !currView ? 'admin-verification' : currView));
+                  } else if (role === 'customer') {
+                    setActiveViewState((currView) => (currView === 'landing' || !currView ? 'customer-dashboard' : currView));
                   }
                 }
               }
@@ -544,7 +546,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
         }
 
-        if (needsBookings && (bookings.length === 0 || activeView.startsWith('worker-') || activeView === 'my-bookings')) {
+        if (needsBookings) {
           promises.push(
             sahaayakService.getBookings().then((dbBookings) => {
               if (isMounted) {
@@ -641,58 +643,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentRole, activeView.startsWith('worker-'), currentUser?.id]);
 
   // Fallback worker profile from authenticated session while database query resolves
-  const fallbackWorkerFromUser: Worker | null =
-    currentUser?.role === 'worker'
-      ? {
-          id: currentUser.workerId || currentUser.id,
-          name: currentUser.name || 'Registered Worker',
-          email: currentUser.email,
-          phone: currentUser.phone || '9876543210',
-          avatar: currentUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-          skill: (currentUser as any).skill || 'Plumbing',
-          experienceYears: 5,
-          distanceKm: 2.5,
-          basePricePerHour: 250,
-          rating: 5.0,
-          reviewsCount: 1,
-          completedJobs: 1,
-          workingHours: '9:00 AM - 7:00 PM',
-          bio: 'Labour cooperative certified specialist.',
-          languages: ['Hindi', 'English'],
-          certifications: [],
-          verificationDocType: 'Labour Cooperative Verification Dossier',
-          safetyRating: 5.0,
-          insuranceCovered: true,
-          emergencyAvailable: true,
-          reviews: [],
-          availability: 'Available Today',
-          isVerified: true,
-          verificationStatus: 'Verified',
-          approval_status: 'approved',
-          cooperativeId: (currentUser as any).cooperativeId || 'coop-1',
-          cooperativeName: currentUser.cooperativeName || 'National Federation of Labour Cooperatives (NLCF)',
-          location: 'Delhi NCR',
-          profile_id: currentUser.id,
-          applicationId: currentUser.applicationId || 'APP-WKR',
-          availabilitySlots: [],
-        }
-      : null;
+  const fallbackWorkerFromUser: Worker | null = useMemo(() => {
+    if (currentUser?.role !== 'worker') return null;
+    return {
+      id: currentUser.workerId || currentUser.id,
+      name: currentUser.name || 'Registered Worker',
+      email: currentUser.email,
+      phone: currentUser.phone || '9876543210',
+      avatar: currentUser.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
+      skill: (currentUser as any).skill || 'Plumbing',
+      experienceYears: 5,
+      distanceKm: 2.5,
+      basePricePerHour: 250,
+      rating: 5.0,
+      reviewsCount: 1,
+      completedJobs: 1,
+      workingHours: '9:00 AM - 7:00 PM',
+      bio: 'Labour cooperative certified specialist.',
+      languages: ['Hindi', 'English'],
+      certifications: [],
+      verificationDocType: 'Labour Cooperative Verification Dossier',
+      safetyRating: 5.0,
+      insuranceCovered: true,
+      emergencyAvailable: true,
+      reviews: [],
+      availability: 'Available Today',
+      isVerified: true,
+      verificationStatus: 'Verified',
+      approval_status: 'approved',
+      cooperativeId: (currentUser as any).cooperativeId || 'coop-1',
+      cooperativeName: currentUser.cooperativeName || 'National Federation of Labour Cooperatives (NLCF)',
+      location: 'Delhi NCR',
+      profile_id: currentUser.id,
+      applicationId: currentUser.applicationId || 'APP-WKR',
+      availabilitySlots: [],
+    };
+  }, [currentUser?.id, currentUser?.role, currentUser?.workerId, currentUser?.name, currentUser?.email, currentUser?.phone, currentUser?.avatar, currentUser?.cooperativeName]);
 
   // Current logged in worker resolution: strictly resolve to authenticated worker with seamless fallback
-  const currentWorker =
-    (currentUser?.role === 'worker' && currentUser?.workerId
-      ? workers.find((w) => w.id === currentUser.workerId)
-      : null) ||
-    (currentUser?.role === 'worker'
-      ? workers.find(
-          (w) =>
-            w.profile_id === currentUser?.id ||
-            (w.email && currentUser?.email && w.email.toLowerCase() === currentUser.email.toLowerCase()) ||
-            (w.phone && currentUser?.phone && w.phone === currentUser.phone) ||
-            (w.name && currentUser?.name && w.name.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
-        )
-      : null) ||
-    fallbackWorkerFromUser;
+  const currentWorker = useMemo(() => {
+    if (currentUser?.role !== 'worker') return null;
+    return (
+      (currentUser.workerId ? workers.find((w) => w.id === currentUser.workerId) : null) ||
+      workers.find(
+        (w) =>
+          w.profile_id === currentUser.id ||
+          (w.email && currentUser.email && w.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (w.phone && currentUser.phone && w.phone === currentUser.phone) ||
+          (w.name && currentUser.name && w.name.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
+      ) ||
+      fallbackWorkerFromUser
+    );
+  }, [currentUser, workers, fallbackWorkerFromUser]);
 
   // Synchronize worker notifications dynamically from requested bookings
   useEffect(() => {
@@ -716,10 +718,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     setWorkerNotifications((prev) => {
+      let changed = false;
       const updated = [...prev];
       for (const b of workerRequestedBookings) {
         const notifId = `notif-${b.id}`;
         if (!updated.some((n) => n.id === notifId || n.bookingId === b.id)) {
+          changed = true;
           updated.unshift({
             id: notifId,
             workerId: targetWorker.id,
@@ -733,7 +737,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       }
-      return updated;
+      return changed ? updated : prev;
     });
   }, [bookings, currentWorker, workers]);
 
@@ -975,13 +979,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (worker as any).status !== 'removed' &&
       (worker as any).status !== 'inactive';
 
-    if (!isWorkerAvailable) {
-      throw new Error('This worker is currently not available for bookings.');
-    }
+    const validCustId = currentUser?.id && isValidUuid(currentUser.id) ? currentUser.id : undefined;
 
     const createdBooking = await sahaayakService.createBooking({
       ...newBookingData,
-      customer_id: currentUser?.id || 'customer',
+      customer_id: validCustId,
       customerName: currentUser?.name || newBookingData.customerName || 'Customer',
       customerPhone: currentUser?.phone || newBookingData.customerPhone || '',
       workerId: worker.id,
@@ -992,7 +994,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       serviceType: worker.skill,
     });
 
-    setBookings((prev) => [createdBooking, ...prev]);
+    setBookings((prev) => [createdBooking, ...prev.filter((b) => b.id !== createdBooking.id)]);
     setActiveBookingId(createdBooking.id);
 
     addWorkerNotification({

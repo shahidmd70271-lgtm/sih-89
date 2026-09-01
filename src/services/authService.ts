@@ -10,30 +10,51 @@ export class AuthService implements IAuthService {
   private currentUser: AuthUser | null = null;
 
   constructor() {
+    this.cleanupLegacyLocalStorage();
     this.loadSession();
+  }
+
+  private cleanupLegacyLocalStorage(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
   }
 
   private loadSession(): void {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        this.currentUser = JSON.parse(data);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const data = window.sessionStorage.getItem(STORAGE_KEY);
+        if (data) {
+          this.currentUser = JSON.parse(data);
+          return;
+        }
       }
     } catch {
       this.currentUser = null;
     }
+    if (typeof window === 'undefined') {
+      // In node/testing, retain current in-memory value
+      return;
+    }
+    this.currentUser = null;
   }
 
   private saveSession(user: AuthUser | null): void {
     this.currentUser = user;
     try {
-      if (user) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        if (user) {
+          window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        } else {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+        }
       }
     } catch {
-      // localStorage fallback
+      // sessionStorage fallback
     }
   }
 
@@ -450,6 +471,16 @@ export class AuthService implements IAuthService {
           throw new Error('No worker registration profile found for this authenticated user.');
         }
 
+        // Ensure worker's profile_id in public.workers is linked to this authenticated user ID for Postgres RLS policies
+        if (data.user?.id && (!workerProfile.profile_id || workerProfile.profile_id !== data.user.id)) {
+          try {
+            await supabase.from('workers').update({ profile_id: data.user.id }).eq('id', workerProfile.id);
+            workerProfile.profile_id = data.user.id;
+          } catch (e) {
+            console.warn('[Worker Auth] profile_id sync notice:', e);
+          }
+        }
+
         const found = mapDbRowToWorker(workerProfile);
         const isRemoved =
           found.verificationStatus === 'Removed' ||
@@ -582,7 +613,7 @@ export class AuthService implements IAuthService {
   async signOut(): Promise<void> {
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
       } catch {
         // continue
       }
