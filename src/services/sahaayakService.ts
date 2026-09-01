@@ -966,10 +966,23 @@ export class SahaayakService implements ISahaayakService {
   }
 
   async verifyOtpAndStartService(bookingId: string, enteredOtp: string): Promise<{ success: boolean; message: string }> {
-    const booking = this.bookings.find((b) => b.id === bookingId);
+    let booking = this.bookings.find((b) => b.id === bookingId);
+    let expectedOtp = booking?.otp || booking?.otpCode || booking?.otp_code || '';
+
+    if (!expectedOtp && isSupabaseConfigured && supabase) {
+      try {
+        const { data: dbBooking } = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+        if (dbBooking) {
+          booking = mapDbRowToBooking(dbBooking);
+          expectedOtp = dbBooking.otp || dbBooking.otp_code || booking.otpCode || '';
+        }
+      } catch (err) {
+        console.warn('Supabase fetch for OTP verify error:', err);
+      }
+    }
+
     if (!booking) return { success: false, message: 'Booking not found' };
 
-    const expectedOtp = booking.otp || booking.otpCode || booking.otp_code || '';
     const isCorrect = enteredOtp.trim() === expectedOtp.trim();
 
     if (!isCorrect) {
@@ -996,11 +1009,20 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
+    this.bookings = [booking, ...this.bookings.filter((b) => b.id !== bookingId)];
     return { success: true, message: 'OTP verified successfully. Service started.' };
   }
 
   async updateBookingStatus(bookingId: string, status: BookingStatus): Promise<Booking> {
-    const booking = this.bookings.find((b) => b.id === bookingId);
+    let booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking && isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+        if (data) booking = mapDbRowToBooking(data);
+      } catch (e) {
+        // non-blocking
+      }
+    }
     if (!booking) throw new Error('Booking not found');
 
     booking.status = status;
@@ -1019,6 +1041,7 @@ export class SahaayakService implements ISahaayakService {
       }
     }
 
+    this.bookings = [booking, ...this.bookings.filter((b) => b.id !== bookingId)];
     return { ...booking };
   }
 
@@ -1027,7 +1050,15 @@ export class SahaayakService implements ISahaayakService {
     paymentMode: PaymentMode,
     extraMaterialsCost = 0
   ): Promise<{ booking: Booking; payment: Payment }> {
-    const booking = this.bookings.find((b) => b.id === bookingId);
+    let booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking && isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+        if (data) booking = mapDbRowToBooking(data);
+      } catch (e) {
+        // non-blocking
+      }
+    }
     if (!booking) throw new Error('Booking not found');
 
     const platformFee = booking.platformFee ?? 15;

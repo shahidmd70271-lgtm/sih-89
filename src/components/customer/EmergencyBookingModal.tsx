@@ -35,6 +35,8 @@ export const EmergencyBookingModal: React.FC = () => {
   const [coordinates, setCoordinates] = useState<LocationCoordinates | null>(null);
   const [notes, setNotes] = useState('');
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   if (!isEmergencyModalOpen) return null;
 
@@ -101,25 +103,36 @@ export const EmergencyBookingModal: React.FC = () => {
   };
 
   const handleInstantDispatch = async (worker: Worker) => {
-    const booking = await createNewBooking({
-      workerId: worker.id,
-      customerAddress: address.trim() || coordinates?.address || 'Current Location',
-      latitude: coordinates?.lat,
-      longitude: coordinates?.lng,
-      customerCoordinates: coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : undefined,
-      date: 'Today (Immediate SOS)',
-      timeSlot: 'Immediate (Next 30 Mins)',
-      problemDescription: `[EMERGENCY SOS] ${selectedEmergencyCategory}: ${notes || 'Immediate assistance requested'}`,
-      estimatedPrice: worker.basePricePerHour,
-      isEmergency: true,
-    });
+    setIsSubmitting(true);
+    setSubmitError(null);
 
-    setConfirmedBooking(booking);
+    try {
+      const booking = await createNewBooking({
+        workerId: worker.id,
+        customerAddress: address.trim() || coordinates?.address || 'Current Location',
+        latitude: coordinates?.lat,
+        longitude: coordinates?.lng,
+        customerCoordinates: coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : undefined,
+        date: 'Today (Immediate SOS)',
+        timeSlot: 'Immediate (Next 30 Mins)',
+        problemDescription: `[EMERGENCY SOS] ${selectedEmergencyCategory}: ${notes || 'Immediate assistance requested'}`,
+        estimatedPrice: worker.basePricePerHour,
+        isEmergency: true,
+      });
+
+      setConfirmedBooking(booking);
+    } catch (err: any) {
+      console.error('[EmergencyBookingModal] Dispatch error:', err);
+      setSubmitError(err?.message || 'Failed to dispatch emergency request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
     setIsEmergencyModalOpen(false);
     setConfirmedBooking(null);
+    setSubmitError(null);
     setMatchedWorkers([]);
   };
 
@@ -371,6 +384,14 @@ export const EmergencyBookingModal: React.FC = () => {
               </div>
             )}
 
+            {/* SUBMIT ERROR BANNER */}
+            {submitError && (
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span className="leading-tight">{submitError}</span>
+              </div>
+            )}
+
             {/* Matched Nearest Available Workers List */}
             {matchedWorkers.length > 0 && (
               <div className="space-y-3 pt-2">
@@ -385,14 +406,13 @@ export const EmergencyBookingModal: React.FC = () => {
 
                 <div className="space-y-3">
                   {matchedWorkers.map((worker, idx) => {
-                    const skillKey = `service_${worker.skill.replace(/[\s&]+/g, '')}`;
-                    const translatedSkill = t(skillKey);
+                    const translatedSkill = t(`service_${worker.skill.replace(/[\s&]+/g, '')}`) || worker.skill;
                     return (
                       <div
                         key={worker.id}
-                        className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-red-400 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                        className="bg-white p-4 rounded-2xl border-2 border-red-200 hover:border-red-400 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all"
                       >
-                        <div className="flex items-center gap-3.5">
+                        <div className="flex items-center gap-3">
                           <div className="relative">
                             <img
                               src={worker.avatar}
@@ -429,10 +449,20 @@ export const EmergencyBookingModal: React.FC = () => {
 
                           <button
                             onClick={() => handleInstantDispatch(worker)}
-                            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md shadow-red-600/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                            disabled={isSubmitting}
+                            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-red-600/20 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                           >
-                            <Zap className="w-3.5 h-3.5" />
-                            <span>Confirm SOS Dispatch</span>
+                            {isSubmitting ? (
+                              <>
+                                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                <span>Dispatching...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>Confirm SOS Dispatch</span>
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>

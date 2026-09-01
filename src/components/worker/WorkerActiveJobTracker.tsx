@@ -394,12 +394,16 @@ export const WorkerActiveJobTracker: React.FC = () => {
                     <span className="text-xs font-bold text-emerald-600">✓ {t('verified')}</span>
                   ) : isArrived ? (
                     <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full animate-pulse">
-                      Awaiting PIN
+                      Awaiting Customer OTP
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-400 font-medium">Locked until arrived</span>
                   )}
                 </div>
+
+                <p className="text-[11px] text-slate-500">
+                  {t('askCustomerForOtp') || 'Ask the customer for the security OTP after arriving.'}
+                </p>
 
                 <form onSubmit={handleVerifyOtpAndStart} className="space-y-2">
                   <div className="flex gap-2">
@@ -409,7 +413,7 @@ export const WorkerActiveJobTracker: React.FC = () => {
                       maxLength={6}
                       value={enteredOtp}
                       onChange={(e) => setEnteredOtp(e.target.value)}
-                      placeholder={t('enter4DigitPin') || 'Enter 4-digit PIN (e.g. 5842)'}
+                      placeholder={t('otpPlaceholder') || 'Enter 4-digit OTP from customer'}
                       disabled={!isArrived}
                       className="flex-1 text-xs bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 focus:outline-emerald-500 disabled:bg-slate-100 disabled:text-slate-400"
                     />

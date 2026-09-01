@@ -469,7 +469,9 @@ export const WorkerJobsView: React.FC<WorkerJobsViewProps> = ({ initialTab = 'pe
                       <span>📅 {booking.date}</span>
                       <span>⏰ {booking.timeSlot}</span>
                       <span>💰 Take-Home: <strong>₹{booking.estimatedPrice}</strong></span>
-                      <span className="text-emerald-700 font-semibold">🔑 OTP: {booking.otpCode}</span>
+                      <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px] font-medium">
+                        🔒 Ask customer for OTP on arrival
+                      </span>
                     </div>
                   </div>
 

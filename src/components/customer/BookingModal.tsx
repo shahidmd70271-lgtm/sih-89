@@ -39,6 +39,8 @@ export const BookingModal: React.FC = () => {
   const [problemDescription, setProblemDescription] = useState('');
   const [addressError, setAddressError] = useState('');
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   if (!isBookingModalOpen || !selectedWorker) return null;
 
@@ -82,35 +84,47 @@ export const BookingModal: React.FC = () => {
     const finalLat = coordinates?.lat || 28.5700;
     const finalLng = coordinates?.lng || 77.2200;
 
-    const created = await createNewBooking({
-      workerId: selectedWorker.id,
-      date: formattedDate,
-      timeSlot: selectedSlot.label,
-      slotId: selectedSlot.id,
-      customerAddress: address.trim(),
-      latitude: finalLat,
-      longitude: finalLng,
-      customerCoordinates: { lat: finalLat, lng: finalLng },
-      problemDescription: problemDescription || `General service for ${selectedWorker.skill}`,
-      estimatedPrice: basePrice,
-      platformFee,
-      welfareCess,
-      totalAmount,
-      isEmergency: false,
-    });
+    setIsSubmitting(true);
+    setSubmitError(null);
 
-    setConfirmedBooking(created);
+    try {
+      const created = await createNewBooking({
+        workerId: selectedWorker.id,
+        date: formattedDate,
+        timeSlot: selectedSlot.label,
+        slotId: selectedSlot.id,
+        customerAddress: address.trim(),
+        latitude: finalLat,
+        longitude: finalLng,
+        customerCoordinates: { lat: finalLat, lng: finalLng },
+        problemDescription: problemDescription || `General service for ${selectedWorker.skill}`,
+        estimatedPrice: basePrice,
+        platformFee,
+        welfareCess,
+        totalAmount,
+        isEmergency: false,
+      });
+
+      setConfirmedBooking(created);
+    } catch (err: any) {
+      console.error('[BookingModal] Booking creation error:', err);
+      setSubmitError(err?.message || 'Failed to create booking in database. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleViewMyBookings = () => {
     setIsBookingModalOpen(false);
     setConfirmedBooking(null);
+    setSubmitError(null);
     setActiveView('my-bookings');
   };
 
   const handleClose = () => {
     setIsBookingModalOpen(false);
     setConfirmedBooking(null);
+    setSubmitError(null);
   };
 
   const skillKey = `service_${selectedWorker.skill.replace(/[\s&]+/g, '')}`;
@@ -526,14 +540,31 @@ export const BookingModal: React.FC = () => {
               </p>
             </div>
 
+            {/* SUBMIT ERROR BANNER */}
+            {submitError && (
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span className="leading-tight">{submitError}</span>
+              </div>
+            )}
+
             {/* CONFIRM BUTTON */}
             <button
               type="submit"
-              disabled={!selectedSlot || selectedSlot.isBooked || !selectedSlot.isAvailable}
+              disabled={isSubmitting || !selectedSlot || selectedSlot.isBooked || !selectedSlot.isAvailable}
               className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-sm shadow-md shadow-emerald-600/25 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Confirm & Book Slot ({selectedSlot?.label || 'Select Slot'})</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  <span>Confirming Booking in Database...</span>
+                </>
+              ) : (
+                <>
+                  <span>Confirm & Book Slot ({selectedSlot?.label || 'Select Slot'})</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
         )}
